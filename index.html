@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-title" content="Mi día">
+<title>Mi día</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #ffffff; --ink: #1d1d1f; --muted: #86868b; --line: #e5e5ea;
+    --accent: #0071e3; --accent-soft: #e8f1fc; --ok: #34c759; --cat: #9a9a9f; --paw: #f2f2f4;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000000; --card: #1c1c1e; --ink: #f5f5f7; --muted: #8e8e93; --line: #2c2c2e;
+      --accent: #0a84ff; --accent-soft: #0b2440; --ok: #30d158; --cat: #6e6e73; --paw: #d1d1d6;
+      --shadow: none; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #000000; --card: #1c1c1e; --ink: #f5f5f7; --muted: #8e8e93; --line: #2c2c2e;
+    --accent: #0a84ff; --accent-soft: #0b2440; --ok: #30d158; --cat: #6e6e73; --paw: #d1d1d6;
+    --shadow: none; color-scheme: dark;
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+
+  .quiz-q { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; margin: 2px 0 14px; }
+  .quiz-opts { display: grid; gap: 8px; }
+  .quiz-opts button { background: var(--bg); color: var(--ink); text-align: left; padding: 12px 14px; border: 1.5px solid transparent; }
+  .quiz-opts button:disabled { cursor: default; opacity: .55; }
+  .quiz-opts button.right { border-color: var(--ok); opacity: 1; }
+  .quiz-opts button.wrong { border-color: #ff3b30; opacity: 1; }
+  .quiz-result { margin-top: 14px; }
+  .quiz-result p { margin: 0 0 4px; }
+  .quiz-result .fact { color: var(--muted); font-size: 15px; }
+  .quiz-actions { display: flex; justify-content: space-between; margin-top: 10px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; letter-spacing: -0.01em;
+  }
+  main { max-width: 540px; margin: 0 auto; padding: 40px 16px 64px; }
+
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .avatar { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; object-position: 50% 15%; flex: 0 0 46px; }
+  h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
+  .date { color: var(--muted); font-size: 15px; margin: 2px 0 0; }
+  .quote { color: var(--muted); font-size: 15px; margin: 14px 0 28px; font-style: italic; }
+
+  .card { background: var(--card); border-radius: 18px; padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 4px 8px; font-weight: 600; }
+
+  .now { position: relative; margin-top: 46px; }
+  .cat { position: absolute; top: -37px; right: 26px; width: 74px; height: 42px; }
+  .now .task { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 2px 0 16px; word-break: break-word; }
+  .now .when { color: var(--accent); font-size: 15px; font-weight: 600; }
+  .now .empty { font-size: 19px; margin: 0; }
+  .alldone { text-align: center; }
+  .alldone img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; object-position: 50% 12%; margin: 4px auto 12px; display: block; }
+
+  button { font: inherit; cursor: pointer; border: 0; border-radius: 12px; padding: 10px 16px; transition: transform .1s, opacity .2s; }
+  button:active { transform: scale(.97); }
+  .primary { background: var(--accent); color: #fff; font-weight: 600; width: 100%; padding: 13px; font-size: 17px; border-radius: 14px; }
+  .link { background: none; color: var(--accent); padding: 6px 4px; }
+  .quiet { background: none; color: var(--muted); padding: 6px 8px; }
+
+  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  input, select {
+    font: inherit; color: var(--ink); background: var(--bg); border: 1px solid transparent;
+    border-radius: 12px; padding: 11px 13px; min-width: 0; outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  form input[type=text] { flex: 1 1 200px; }
+  form input[type=time] { flex: 0 0 118px; }
+  form button { background: var(--ink); color: var(--card); font-weight: 600; }
+
+  .head-row { display: flex; align-items: baseline; justify-content: space-between; }
+  .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 10px 0 4px; }
+  .progress > div { height: 100%; background: var(--ok); width: 0; border-radius: 99px; transition: width .5s cubic-bezier(.2,.8,.2,1); }
+
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  li:last-child { border-bottom: 0; }
+  .check {
+    width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; border: 1.5px solid var(--muted);
+    background: transparent; padding: 0; display: grid; place-items: center; transition: background .2s, border-color .2s;
+  }
+  .check svg { width: 13px; height: 13px; opacity: 0; transition: opacity .2s; }
+  li.done .check { background: var(--accent); border-color: var(--accent); }
+  li.done .check svg { opacity: 1; }
+  li.done .text { color: var(--muted); }
+  .text { flex: 1; word-break: break-word; transition: color .2s; }
+  .time { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .del { background: none; color: var(--muted); padding: 2px 6px; opacity: .5; font-size: 15px; }
+  .del:hover { opacity: 1; }
+  .hint { color: var(--muted); font-size: 14px; margin: 10px 2px 0; }
+
+  .banner { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  details summary { cursor: pointer; color: var(--muted); list-style: none; }
+  details summary::-webkit-details-marker { display: none; }
+  details[open] summary { margin-bottom: 4px; }
+  .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .row:last-of-type { border-bottom: 0; }
+
+  #toast {
+    position: fixed; left: 50%; top: 18px; transform: translate(-50%, -160%);
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    color: var(--ink); padding: 14px 20px; border-radius: 18px; max-width: 92vw; width: max-content;
+    font-weight: 500; transition: transform .45s cubic-bezier(.2,.9,.2,1); z-index: 10;
+    box-shadow: 0 10px 40px rgba(0,0,0,.15); border: 1px solid var(--line); text-align: center;
+  }
+  #toast.show { transform: translate(-50%, 0); }
+  #toast small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  .burst { position: fixed; pointer-events: none; font-size: 18px; animation: fly .9s ease-out forwards; z-index: 9; }
+  @keyframes fly { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img class="avatar" id="avatar" src="gata.jpg" alt="" onerror="this.remove()">
+    <div>
+      <h1 id="hello">Hoy</h1>
+      <p class="date" id="date"></p>
+    </div>
+  </header>
+  <p class="quote" id="quote"></p>
+
+  <div class="card" id="leftover" hidden>
+    <div class="banner">
+      <span id="leftoverText"></span>
+      <span>
+        <button class="link" id="bringOver">Pasarlas a hoy</button>
+        <button class="quiet" id="dismissLeftover">Ahora no</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="card now">
+    <svg class="cat" viewBox="0 0 80 46" aria-hidden="true">
+      <path d="M17 44 C17 24 25 14 40 14 C55 14 63 24 63 44 Z" fill="var(--cat)"/>
+      <path d="M21 26 L19 4 L35 15 Z" fill="var(--cat)"/>
+      <path d="M59 26 L61 4 L45 15 Z" fill="var(--cat)"/>
+      <path d="M24 21 L23 11 L30 16 Z" fill="var(--paw)" opacity=".55"/>
+      <path d="M56 21 L57 11 L50 16 Z" fill="var(--paw)" opacity=".55"/>
+      <path d="M33 44 C33 36 36 32 40 32 C44 32 47 36 47 44 Z" fill="var(--paw)"/>
+      <ellipse cx="32" cy="29" rx="2.3" ry="2.8" fill="var(--card)"/>
+      <ellipse cx="48" cy="29" rx="2.3" ry="2.8" fill="var(--card)"/>
+      <path d="M38.3 34.5 L41.7 34.5 L40 36.3 Z" fill="#f4a3b4"/>
+      <ellipse cx="25" cy="43" rx="8" ry="4.2" fill="var(--paw)" stroke="var(--cat)" stroke-width="1"/>
+      <ellipse cx="55" cy="43" rx="8" ry="4.2" fill="var(--paw)" stroke="var(--cat)" stroke-width="1"/>
+    </svg>
+    <div class="section-title" style="margin-left:0">Ahora toca</div>
+    <div id="nowBody"></div>
+  </div>
+
+  <div class="card" id="quizCard" hidden>
+    <div class="section-title" style="margin-left:0">Pregunta del momento 🧠</div>
+    <div class="quiz-q" id="quizQ"></div>
+    <div class="quiz-opts" id="quizOpts"></div>
+    <div class="quiz-result" id="quizResult"></div>
+  </div>
+
+  <div class="card">
+    <form id="addForm" autocomplete="off">
+      <input type="text" id="newText" placeholder="Agregar algo para hoy" required>
+      <input type="time" id="newTime" title="Hora (opcional)">
+      <button type="submit">Agregar</button>
+    </form>
+    <p class="hint">La hora es opcional. Si le pones una, te aviso 10 minutos antes y a la hora.</p>
+  </div>
+
+  <div class="card">
+    <div class="head-row">
+      <strong id="countText">Lista de hoy</strong>
+      <button class="link" id="clearDone">Quitar hechas</button>
+    </div>
+    <div class="progress"><div id="bar"></div></div>
+    <ul id="list"></ul>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Ajustes</summary>
+      <div class="row">
+        <label for="name">Tu nombre</label>
+        <input id="name" type="text" placeholder="Nombre" style="flex:1; max-width:200px">
+      </div>
+      <div class="row">
+        <label for="catName">Nombre de tu gata</label>
+        <input id="catName" type="text" placeholder="Nombre" style="flex:1; max-width:200px">
+      </div>
+      <div class="row">
+        <label for="nudge">Recordarme lo pendiente</label>
+        <select id="nudge">
+          <option value="0">Nunca</option>
+          <option value="30">Cada 30 min</option>
+          <option value="60">Cada hora</option>
+          <option value="90">Cada hora y media</option>
+          <option value="120">Cada 2 horas</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="pause">Recordarme pausas</label>
+        <select id="pause">
+          <option value="0">Nunca</option>
+          <option value="60">Cada hora</option>
+          <option value="90">Cada hora y media</option>
+          <option value="120">Cada 2 horas</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="theme">Apariencia</label>
+        <select id="theme">
+          <option value="auto">Automática</option>
+          <option value="light">Clara</option>
+          <option value="dark">Oscura</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="quizOn">Pregunta de cultura general cuando llega la hora</label>
+        <input id="quizOn" type="checkbox">
+      </div>
+      <div class="row">
+        <span id="scoreText" style="color:var(--muted); font-size:15px"></span>
+        <button class="link" id="quizNow">Jugar una ahora</button>
+      </div>
+      <div class="row">
+        <label for="sound">Sonido</label>
+        <input id="sound" type="checkbox">
+      </div>
+      <div class="row">
+        <span id="notifStatus" style="color:var(--muted); font-size:15px"></span>
+        <button class="link" id="enableNotif">Activar notificaciones</button>
+      </div>
+      <p class="hint">Los avisos funcionan mientras esta página esté abierta, aunque esté minimizada. Solo salen entre 8:00 y 22:00.</p>
+    </details>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+(() => {
+  const KEY = 'mi-dia-v1';
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, '0');
+  const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const toMin = hm => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+
+  let state = {
+    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, theme: 'auto', quiz: true },
+    lastNudge: 0, lastPause: 0, dismissed: '', quiz: null, score: { ok: 0, total: 0 }, asked: []
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY));
+    if (saved) state = Object.assign(state, saved, { settings: Object.assign(state.settings, saved.settings || {}) });
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  const catLower = () => state.settings.catName || 'tu gata';
+  const cat = () => { const c = catLower(); return c.charAt(0).toUpperCase() + c.slice(1); };
+
+  // mensajitos de amor (salen de vez en cuando, de sorpresa)
+  const love = [
+    ['Te quiero mucho. 🧡', 'Y estoy muy orgullosa de ti.'],
+    ['Estoy orgullosa de ti.', 'De verdad, lo estás haciendo increíble. 🧡'],
+    ['Lo estás haciendo súper.', 'Te quiero mucho, no lo olvides. 🧡'],
+    ['Pasaba a recordarte algo:', 'te quiero muchísimo. 🧡'],
+    ['Me encanta verte avanzar.', 'Estoy muy orgullosa de ti. 🧡'],
+  ];
+  const sometimesLove = (list, chance) => Math.random() < chance ? pick(love) : pick(list);
+
+  // ---------- banco de preguntas: [pregunta, correcta, [incorrectas], dato] ----------
+  const QUIZ = [
+    ['¿Cuál es la capital de Australia?', 'Canberra', ['Sídney', 'Melbourne', 'Perth'], 'Canberra se construyó como capital para resolver la rivalidad entre Sídney y Melbourne.'],
+    ['¿Cuál es la capital de Canadá?', 'Ottawa', ['Toronto', 'Montreal', 'Vancouver'], 'Ottawa fue elegida capital por la reina Victoria en 1857.'],
+    ['¿Cuál es la capital de Brasil?', 'Brasilia', ['Río de Janeiro', 'São Paulo', 'Salvador'], 'Brasilia se inauguró en 1960 y fue planificada desde cero.'],
+    ['¿Cuál es la capital de Turquía?', 'Ankara', ['Estambul', 'Esmirna', 'Antalya'], 'Estambul es la ciudad más grande, pero la capital es Ankara desde 1923.'],
+    ['¿Cuál es la capital de Suiza?', 'Berna', ['Zúrich', 'Ginebra', 'Basilea'], 'En Suiza a Berna se le llama oficialmente "ciudad federal".'],
+    ['¿Cuál es la capital de Nueva Zelanda?', 'Wellington', ['Auckland', 'Christchurch', 'Queenstown'], 'Wellington es la capital más austral del mundo.'],
+    ['¿Cuál es la capital de Marruecos?', 'Rabat', ['Casablanca', 'Marrakech', 'Fez'], 'Casablanca es la ciudad más grande de Marruecos, pero la capital es Rabat.'],
+    ['¿Cuál es la capital de Noruega?', 'Oslo', ['Bergen', 'Estocolmo', 'Copenhague'], 'Estocolmo es la capital de Suecia y Copenhague la de Dinamarca.'],
+    ['¿Cuál es la capital de Corea del Sur?', 'Seúl', ['Busan', 'Pionyang', 'Incheon'], 'Pionyang es la capital de Corea del Norte.'],
+    ['¿Cuál es la capital de Kenia?', 'Nairobi', ['Mombasa', 'Adís Abeba', 'Kampala'], 'Nairobi tiene un parque nacional con jirafas y leones dentro de la ciudad.'],
+    ['¿Cuál es la capital de Islandia?', 'Reikiavik', ['Oslo', 'Helsinki', 'Akureyri'], 'Reikiavik es la capital más al norte de un país soberano.'],
+    ['¿Cuál es la capital de Vietnam?', 'Hanói', ['Ho Chi Minh', 'Da Nang', 'Hue'], 'Ho Chi Minh, antes Saigón, es la ciudad más grande del país.'],
+    ['¿Cuál es la capital de Nigeria?', 'Abuja', ['Lagos', 'Kano', 'Ibadán'], 'Abuja reemplazó a Lagos como capital en 1991.'],
+    ['¿Cuál es la capital de Pakistán?', 'Islamabad', ['Karachi', 'Lahore', 'Peshawar'], 'Islamabad fue construida como capital en los años sesenta.'],
+    ['¿Cuál es la capital de Hungría?', 'Budapest', ['Viena', 'Praga', 'Bucarest'], 'Budapest nació de la unión de Buda y Pest, a cada lado del Danubio.'],
+    ['¿Cuál es la capital de Finlandia?', 'Helsinki', ['Tallin', 'Oslo', 'Turku'], 'Tallin, la capital de Estonia, está a unas dos horas en ferry de Helsinki.'],
+    ['¿Cuál es la capital de Ecuador?', 'Quito', ['Guayaquil', 'Cuenca', 'Manta'], 'Quito está a unos 2 850 metros de altura.'],
+    ['¿Cuál es la capital de Uruguay?', 'Montevideo', ['Punta del Este', 'Asunción', 'Colonia'], 'Asunción es la capital de Paraguay.'],
+    ['¿Cuál es la capital de Filipinas?', 'Manila', ['Cebú', 'Quezón', 'Davao'], 'Filipinas tiene más de 7 000 islas.'],
+    ['¿Cuál es la capital de Egipto?', 'El Cairo', ['Alejandría', 'Luxor', 'Giza'], 'Las pirámides de Giza están en las afueras de El Cairo.'],
+    ['¿Quién escribió La Divina Comedia?', 'Dante Alighieri', ['Francesco Petrarca', 'Giovanni Boccaccio', 'Nicolás Maquiavelo'], 'Dante la escribió a inicios del siglo XIV y se divide en Infierno, Purgatorio y Paraíso.'],
+    ['¿Quién escribió Cien años de soledad?', 'Gabriel García Márquez', ['Mario Vargas Llosa', 'Julio Cortázar', 'Isabel Allende'], 'Se publicó en 1967 y transcurre en el pueblo ficticio de Macondo.'],
+    ['¿Quién escribió Don Quijote de la Mancha?', 'Miguel de Cervantes', ['Lope de Vega', 'Francisco de Quevedo', 'Calderón de la Barca'], 'La primera parte se publicó en 1605.'],
+    ['¿Quién escribió Romeo y Julieta?', 'William Shakespeare', ['Charles Dickens', 'Oscar Wilde', 'Jane Austen'], 'La historia transcurre en Verona, Italia.'],
+    ['¿Quién escribió El principito?', 'Antoine de Saint-Exupéry', ['Julio Verne', 'Victor Hugo', 'Albert Camus'], 'Saint-Exupéry también era piloto, y eso se nota en la historia.'],
+    ['¿Quién escribió 1984?', 'George Orwell', ['Aldous Huxley', 'Ray Bradbury', 'H. G. Wells'], 'De esa novela viene la expresión "el Gran Hermano te vigila".'],
+    ['¿Qué peruano ganó el Nobel de Literatura en 2010?', 'Mario Vargas Llosa', ['César Vallejo', 'Julio Ramón Ribeyro', 'José María Arguedas'], 'Entre sus novelas más conocidas están La ciudad y los perros y Conversación en La Catedral.'],
+    ['¿Quién pintó La noche estrellada?', 'Vincent van Gogh', ['Claude Monet', 'Pablo Picasso', 'Salvador Dalí'], 'Van Gogh la pintó en 1889 desde la ventana de un hospital en Francia.'],
+    ['¿Quién pintó la Mona Lisa?', 'Leonardo da Vinci', ['Miguel Ángel', 'Rafael', 'Botticelli'], 'Está en el Museo del Louvre, en París.'],
+    ['¿Quién pintó el techo de la Capilla Sixtina?', 'Miguel Ángel', ['Leonardo da Vinci', 'Rafael', 'Caravaggio'], 'Le tomó unos cuatro años, de 1508 a 1512.'],
+    ['¿Quién compuso la Novena Sinfonía, la del "Himno a la alegría"?', 'Ludwig van Beethoven', ['Wolfgang Amadeus Mozart', 'Johann Sebastian Bach', 'Frédéric Chopin'], 'Beethoven ya estaba prácticamente sordo cuando la compuso.'],
+    ['¿Cuál es el planeta más grande del sistema solar?', 'Júpiter', ['Saturno', 'Neptuno', 'Urano'], 'En Júpiter cabrían más de 1 300 Tierras.'],
+    ['¿Qué planeta es conocido como el planeta rojo?', 'Marte', ['Venus', 'Mercurio', 'Júpiter'], 'Su color viene del óxido de hierro en su superficie.'],
+    ['¿Cuántos huesos tiene el cuerpo de un adulto?', '206', ['186', '226', '256'], 'Los bebés nacen con más huesos, que luego se fusionan.'],
+    ['¿Cuál es el hueso más largo del cuerpo humano?', 'El fémur', ['La tibia', 'El húmero', 'El peroné'], 'El fémur está en el muslo.'],
+    ['¿Cuál es el océano más grande?', 'Pacífico', ['Atlántico', 'Índico', 'Ártico'], 'El Pacífico es más grande que toda la tierra firme del planeta junta.'],
+    ['¿En qué año llegó el ser humano a la Luna?', '1969', ['1965', '1972', '1959'], 'Neil Armstrong y Buzz Aldrin caminaron en la Luna con el Apolo 11.'],
+    ['¿Cuál es el símbolo químico del oro?', 'Au', ['Ag', 'Or', 'Go'], 'Viene del latín "aurum". Ag es la plata.'],
+    ['¿Quién propuso la teoría de la relatividad?', 'Albert Einstein', ['Isaac Newton', 'Nikola Tesla', 'Stephen Hawking'], 'Einstein publicó la relatividad especial en 1905.'],
+    ['¿Qué científica ganó dos premios Nobel en ciencias distintas?', 'Marie Curie', ['Rosalind Franklin', 'Ada Lovelace', 'Lise Meitner'], 'Ganó el de Física en 1903 y el de Química en 1911.'],
+    ['¿Qué gas absorben las plantas para hacer la fotosíntesis?', 'Dióxido de carbono', ['Oxígeno', 'Nitrógeno', 'Helio'], 'A cambio, liberan oxígeno.'],
+    ['¿Cuál es el animal terrestre más rápido?', 'El guepardo', ['El león', 'El caballo', 'La gacela'], 'Puede superar los 100 km/h en carreras cortas.'],
+    ['¿Cuál es el único mamífero capaz de volar?', 'El murciélago', ['La ardilla voladora', 'El colibrí', 'El pingüino'], 'La ardilla voladora planea, pero no vuela de verdad.'],
+    ['¿Cuántos corazones tiene un pulpo?', 'Tres', ['Uno', 'Dos', 'Ocho'], 'Además, su sangre es azul.'],
+    ['Más o menos, ¿cuántas horas al día duerme un gato?', 'Entre 12 y 16', ['Entre 4 y 6', 'Entre 8 y 10', 'Entre 20 y 22'], 'La Gordita no es floja, es completamente normal. 🐾'],
+    ['¿Cuál es la montaña más alta del mundo sobre el nivel del mar?', 'El Everest', ['El K2', 'El Aconcagua', 'El Kilimanjaro'], 'Mide unos 8 849 metros.'],
+    ['¿Cuál es el desierto cálido más grande del mundo?', 'El Sahara', ['El de Atacama', 'El de Gobi', 'El de Kalahari'], 'El desierto más grande en total es la Antártida, porque es un desierto frío.'],
+    ['¿Cuál es el país más grande del mundo?', 'Rusia', ['Canadá', 'China', 'Estados Unidos'], 'Rusia tiene 11 husos horarios.'],
+    ['¿Qué país le regaló la Estatua de la Libertad a Estados Unidos?', 'Francia', ['Inglaterra', 'España', 'Italia'], 'Fue un regalo de 1886. Su estructura interna la diseñó Gustave Eiffel.'],
+    ['¿En qué país está la Torre de Pisa?', 'Italia', ['España', 'Francia', 'Grecia'], 'Empezó a inclinarse mientras la construían, en el siglo XII.'],
+    ['¿Cuál es el elemento más abundante del universo?', 'Hidrógeno', ['Oxígeno', 'Helio', 'Carbono'], 'Cerca de tres cuartas partes de la materia normal del universo es hidrógeno.'],
+    ['¿Qué vitamina produce la piel con la luz del sol?', 'Vitamina D', ['Vitamina C', 'Vitamina A', 'Vitamina B12'], 'Ayuda a absorber el calcio de los huesos.'],
+    ['¿Cuántos minutos tarda la luz del Sol en llegar a la Tierra?', 'Unos 8', ['Unos 2', 'Unos 30', 'Unas 2 horas'], 'Cuando miras el Sol, lo ves como era hace 8 minutos.'],
+    ['¿Cuántos jugadores tiene en cancha un equipo de fútbol?', '11', ['9', '10', '12'], 'Contando al arquero.'],
+    ['¿Cuál es el metal más abundante en la corteza terrestre?', 'Aluminio', ['Hierro', 'Cobre', 'Oro'], 'El hierro es el más abundante si se cuenta todo el planeta, incluido el núcleo.'],
+    ['¿Cuál es la capital de Japón?', 'Tokio', ['Kioto', 'Osaka', 'Hiroshima'], 'Kioto fue la capital de Japón durante más de mil años.'],
+    ['¿Cuál es la capital de Portugal?', 'Lisboa', ['Oporto', 'Coímbra', 'Faro'], 'A Lisboa se la conoce como la ciudad de las siete colinas.'],
+    ['¿Cuál es la capital de Grecia?', 'Atenas', ['Esparta', 'Tesalónica', 'Corinto'], 'Atenas lleva el nombre de la diosa Atenea.'],
+    ['¿Cuál es la capital de Irlanda?', 'Dublín', ['Belfast', 'Cork', 'Galway'], 'Belfast es la capital de Irlanda del Norte, que es parte del Reino Unido.'],
+    ['¿Cuál es la capital de Tailandia?', 'Bangkok', ['Phuket', 'Chiang Mai', 'Pattaya'], 'Su nombre ceremonial completo es uno de los nombres de ciudad más largos del mundo.'],
+    ['¿Cuál es la capital de Colombia?', 'Bogotá', ['Medellín', 'Cali', 'Cartagena'], 'Bogotá está a unos 2 600 metros de altura.'],
+    ['¿Cuál es la capital de Chile?', 'Santiago', ['Valparaíso', 'Concepción', 'Viña del Mar'], 'El Congreso de Chile no está en Santiago, sino en Valparaíso.'],
+    ['¿Cuál es la capital de Cuba?', 'La Habana', ['Santiago de Cuba', 'Varadero', 'Trinidad'], 'El famoso Malecón de La Habana mide unos 8 kilómetros.'],
+    ['¿Cuál es la capital de Alemania?', 'Berlín', ['Múnich', 'Fráncfort', 'Bonn'], 'Bonn fue la capital de Alemania Occidental hasta la reunificación.'],
+    ['¿Cuál es la capital de la India?', 'Nueva Delhi', ['Bombay', 'Calcuta', 'Bangalore'], 'Bombay es la ciudad más poblada y el centro financiero del país.'],
+    ['¿Cuál es la capital de China?', 'Pekín', ['Shanghái', 'Hong Kong', 'Cantón'], 'En Pekín está la Ciudad Prohibida, el antiguo palacio imperial.'],
+    ['¿Cuál es la capital de Polonia?', 'Varsovia', ['Cracovia', 'Gdansk', 'Breslavia'], 'Antes de Varsovia, la capital de Polonia fue Cracovia.'],
+    ['¿Cuál es la capital de Dinamarca?', 'Copenhague', ['Aarhus', 'Oslo', 'Odense'], 'La famosa estatua de La Sirenita está en Copenhague.'],
+    ['¿Cuál es la capital de los Países Bajos?', 'Ámsterdam', ['La Haya', 'Róterdam', 'Utrecht'], 'El gobierno funciona en La Haya, pero la capital oficial es Ámsterdam.'],
+    ['¿Cuál es la capital de Paraguay?', 'Asunción', ['Ciudad del Este', 'Encarnación', 'Montevideo'], 'Asunción es una de las ciudades más antiguas de Sudamérica, fundada en 1537.'],
+    ['¿Cuál es la capital de Venezuela?', 'Caracas', ['Maracaibo', 'Valencia', 'Mérida'], 'Caracas está en un valle rodeado por el cerro El Ávila.'],
+    ['¿Cuál es la capital de Rusia?', 'Moscú', ['San Petersburgo', 'Kazán', 'Sochi'], 'San Petersburgo fue la capital del Imperio ruso durante unos 200 años.'],
+    ['¿Cuál es la capital de Escocia?', 'Edimburgo', ['Glasgow', 'Aberdeen', 'Dublín'], 'Glasgow es la ciudad más grande de Escocia, pero la capital es Edimburgo.'],
+    ['¿Cuál es la capital de Etiopía?', 'Adís Abeba', ['Nairobi', 'Asmara', 'Jartum'], 'Adís Abeba es la sede de la Unión Africana.'],
+    ['Tradicionalmente, ¿cuántos colores tiene el arcoíris?', 'Siete', ['Cinco', 'Seis', 'Ocho'], 'Fue Isaac Newton quien lo dividió en siete colores.'],
+    ['¿Cuál es el órgano más grande del cuerpo humano?', 'La piel', ['El hígado', 'Los pulmones', 'El intestino'], 'En un adulto, la piel pesa varios kilos.'],
+    ['¿Qué país tiene forma de bota en el mapa?', 'Italia', ['Grecia', 'Portugal', 'Chile'], 'La "punta" de la bota es la región de Calabria.'],
+    ['¿Cuál es el río más largo de Europa?', 'El Volga', ['El Danubio', 'El Rin', 'El Sena'], 'El Volga recorre Rusia y desemboca en el mar Caspio.'],
+    ['¿Cuál es el lago navegable más alto del mundo?', 'El Titicaca', ['El Baikal', 'El Victoria', 'El Tanganica'], 'Está a unos 3 800 metros, entre Perú y Bolivia.'],
+    ['¿Quién descubrió la penicilina?', 'Alexander Fleming', ['Louis Pasteur', 'Robert Koch', 'Edward Jenner'], 'La descubrió en 1928 casi por accidente, con un moho que creció en su laboratorio.'],
+    ['¿Quién formuló la ley de la gravitación universal?', 'Isaac Newton', ['Galileo Galilei', 'Albert Einstein', 'Johannes Kepler'], 'La historia de la manzana es probablemente una exageración, pero es famosa.'],
+    ['¿Cuántos planetas tiene el sistema solar?', 'Ocho', ['Siete', 'Nueve', 'Diez'], 'Plutón dejó de considerarse planeta en 2006.'],
+    ['¿Cuál es el planeta más cercano al Sol?', 'Mercurio', ['Venus', 'Marte', 'La Tierra'], 'Aun así, el planeta más caliente es Venus, por su atmósfera.'],
+    ['¿Cuál es el animal más grande del mundo?', 'La ballena azul', ['El elefante africano', 'El tiburón ballena', 'La jirafa'], 'Su corazón es del tamaño de un auto pequeño.'],
+    ['¿Cuántas patas tiene una araña?', 'Ocho', ['Seis', 'Diez', 'Doce'], 'Por eso las arañas no son insectos: los insectos tienen seis.'],
+    ['¿De qué se hace principalmente el vidrio?', 'De arena', ['De sal', 'De arcilla', 'De cal'], 'La arena tiene sílice, que se funde a más de 1 500 °C.'],
+    ['¿Qué instrumento mide la presión atmosférica?', 'El barómetro', ['El termómetro', 'El higrómetro', 'El anemómetro'], 'El anemómetro mide la velocidad del viento.'],
+    ['¿Cuál es la fórmula química del agua?', 'H₂O', ['CO₂', 'O₂', 'H₂O₂'], 'H₂O₂ es el agua oxigenada.'],
+    ['¿En qué ciudad está el Coliseo?', 'Roma', ['Atenas', 'Florencia', 'Venecia'], 'Podía recibir a unas 50 000 personas.'],
+    ['¿Qué civilización construyó Machu Picchu?', 'Los incas', ['Los mayas', 'Los aztecas', 'Los moches'], 'Se construyó en el siglo XV, durante el gobierno de Pachacútec.'],
+    ['¿Quién fue el primer presidente de Estados Unidos?', 'George Washington', ['Abraham Lincoln', 'Thomas Jefferson', 'John Adams'], 'La capital Washington D. C. lleva su nombre.'],
+    ['¿En qué año cayó el Muro de Berlín?', '1989', ['1979', '1991', '1985'], 'Cayó el 9 de noviembre de 1989.'],
+    ['¿En qué año empezó la Primera Guerra Mundial?', '1914', ['1918', '1939', '1905'], 'Terminó en 1918.'],
+    ['¿Quién pintó el Guernica?', 'Pablo Picasso', ['Salvador Dalí', 'Joan Miró', 'Francisco de Goya'], 'Lo pintó en 1937, después del bombardeo de esa ciudad española.'],
+    ['¿Quién pintó Las meninas?', 'Diego Velázquez', ['Francisco de Goya', 'El Greco', 'Bartolomé Murillo'], 'El propio Velázquez aparece pintando dentro del cuadro.'],
+    ['¿Quién escribió La metamorfosis?', 'Franz Kafka', ['Hermann Hesse', 'Thomas Mann', 'Albert Camus'], 'Empieza cuando Gregorio Samsa despierta convertido en un insecto.'],
+    ['¿Quién escribió Los heraldos negros?', 'César Vallejo', ['José Santos Chocano', 'Javier Heraud', 'Pablo Neruda'], 'Empieza con el verso "Hay golpes en la vida, tan fuertes… ¡Yo no sé!".'],
+    ['¿Quién escribió Rayuela?', 'Julio Cortázar', ['Jorge Luis Borges', 'Ernesto Sabato', 'Juan Rulfo'], 'Se puede leer en orden normal o saltando capítulos, como propone el autor.'],
+    ['¿Quién escribió Orgullo y prejuicio?', 'Jane Austen', ['Emily Brontë', 'Virginia Woolf', 'Mary Shelley'], 'Se publicó en 1813. Mary Shelley escribió Frankenstein.'],
+    ['¿Qué banda grabó el disco Abbey Road?', 'The Beatles', ['The Rolling Stones', 'Queen', 'Pink Floyd'], 'Abbey Road es el nombre de la calle del estudio en Londres.'],
+    ['¿Cuántas cuerdas tiene una guitarra clásica?', 'Seis', ['Cuatro', 'Cinco', 'Doce'], 'El ukelele tiene cuatro.'],
+    ['¿Qué idioma se habla oficialmente en Brasil?', 'Portugués', ['Español', 'Brasileño', 'Francés'], 'Brasil es el país con más hablantes de portugués del mundo.'],
+    ['¿Cuál es la moneda de Japón?', 'El yen', ['El won', 'El yuan', 'El baht'], 'El won es de Corea del Sur y el yuan de China.'],
+    ['¿Cuántos lados tiene un hexágono?', 'Seis', ['Cinco', 'Siete', 'Ocho'], 'Las celdas de los panales de abejas son hexagonales.'],
+    ['¿Cuántos grados suman los ángulos de un triángulo?', '180', ['90', '270', '360'], 'Siempre suman 180, sea el triángulo que sea.'],
+    ['¿Cuál es el número primo más pequeño?', '2', ['1', '3', '0'], 'El 2 es además el único número primo par.'],
+    ['¿Qué inventó Johannes Gutenberg?', 'La imprenta de tipos móviles', ['El telescopio', 'La brújula', 'El reloj mecánico'], 'Uno de sus primeros grandes trabajos fue la Biblia de Gutenberg, hacia 1455.'],
+    ['¿Quién fue la primera persona en viajar al espacio?', 'Yuri Gagarin', ['Neil Armstrong', 'Buzz Aldrin', 'Valentina Tereshkova'], 'Lo hizo en 1961. Tereshkova fue la primera mujer, en 1963.'],
+    ['¿Qué usan los gatos para saber si caben por un espacio?', 'Los bigotes', ['La cola', 'Las orejas', 'Las patas'], 'Sus bigotes son muy sensibles y detectan hasta cambios en el aire. 🐾'],
+    ['¿En qué civilización antigua se veneraba a los gatos?', 'En el antiguo Egipto', ['En la antigua Grecia', 'En el Imperio romano', 'En Mesopotamia'], 'Tenían una diosa con cabeza de gata llamada Bastet. La Gordita lo sabe. 😼'],
+  ];
+
+  const shuffle = a => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+  function newQuiz() {
+    if (state.asked.length >= QUIZ.length) state.asked = [];
+    const free = QUIZ.map((_, i) => i).filter(i => !state.asked.includes(i));
+    const i = pick(free);
+    state.asked.push(i);
+    const [, right, wrongs] = QUIZ.at(i);
+    state.quiz = { i, opts: shuffle([right, ...wrongs]), picked: null };
+  }
+  function answerQuiz(opt) {
+    if (!state.quiz || state.quiz.picked) return;
+    state.quiz.picked = opt;
+    state.score.total++;
+    const ok = opt === QUIZ.at(state.quiz.i)[1];
+    if (ok) state.score.ok++;
+    save(); render();
+    if (ok) toast('¡Correcto! 🧠', pick(['Qué crack.', 'Sabía que la sabías.', `${cat()} está impresionada. 🐾`]));
+  }
+  function renderQuiz() {
+    const q = state.quiz;
+    $('quizCard').hidden = !q;
+    $('scoreText').textContent = state.score.total ? `Aciertos: ${state.score.ok} de ${state.score.total}` : 'Aún no ha jugado';
+    if (!q) return;
+    const [question, right, , fact] = QUIZ.at(q.i);
+    $('quizQ').textContent = question;
+    const opts = $('quizOpts');
+    opts.innerHTML = '';
+    for (const o of q.opts) {
+      const b = document.createElement('button');
+      b.textContent = o;
+      if (q.picked) {
+        b.disabled = true;
+        if (o === right) b.className = 'right';
+        else if (o === q.picked) b.className = 'wrong';
+      }
+      b.onclick = () => answerQuiz(o);
+      opts.append(b);
+    }
+    const res = $('quizResult');
+    res.innerHTML = '';
+    if (!q.picked) return;
+    const msg = document.createElement('p');
+    msg.innerHTML = q.picked === right ? '<strong>¡Correcto!</strong>' : '<strong>Casi.</strong> La respuesta correcta es: ';
+    if (q.picked !== right) msg.append(Object.assign(document.createElement('strong'), { textContent: right }));
+    const f = document.createElement('p');
+    f.className = 'fact';
+    f.textContent = 'Dato: ' + fact;
+    const actions = document.createElement('div');
+    actions.className = 'quiz-actions';
+    const more = Object.assign(document.createElement('button'), { className: 'link', textContent: 'Otra pregunta' });
+    more.onclick = () => { newQuiz(); save(); render(); };
+    const close = Object.assign(document.createElement('button'), { className: 'quiet', textContent: 'Cerrar' });
+    close.onclick = () => { state.quiz = null; save(); render(); };
+    actions.append(more, close);
+    res.append(msg, f, actions);
+  }
+
+  function applyTheme() {
+    const t = state.settings.theme;
+    if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', t);
+  }
+  applyTheme();
+
+  // ---------- mensajes bonitos ----------
+  const cheers = () => [
+    ['Lo estás haciendo súper.', 'Una menos.'],
+    ['Bien hecho.', 'Paso a paso, así se avanza.'],
+    ['Eso.', 'Sigue a tu ritmo, vas bien.'],
+    [`${cat()} está orgullosa de ti.`, '🐾'],
+    ['Una cosa a la vez.', 'Y acabas de hacer una.'],
+    ['Qué bien.', 'Date un segundo para notarlo.'],
+    ['Listo.', 'Tu yo de mañana te lo agradece.'],
+  ];
+  const pauses = () => [
+    ['Tómate una pausa.', 'Estira un poco, toma agua y vuelve.'],
+    ['¿Ya tomaste agua?', 'Un vaso y seguimos.'],
+    ['Respira hondo.', 'Tres veces, despacio.'],
+    ['Levántate un ratito.', `${cat()} lo aprobaría.`],
+    ['Descansa los ojos.', 'Mira algo lejos por 20 segundos.'],
+    ['Pausa de 5 minutos.', 'Te la ganaste.'],
+  ];
+  const quotes = () => [
+    'Hoy no tiene que ser perfecto, solo tiene que avanzar.',
+    'Empieza por lo más pequeño. El resto viene solo.',
+    'Hecho es mejor que perfecto.',
+    'Una cosa a la vez está bien.',
+    'Si hoy cuesta, está bien ir más lento.',
+    `${cat()} cree en ti. Y yo también.`,
+    'Lo estás haciendo mejor de lo que crees.',
+    'Alguien te quiere mucho y está muy orgullosa de ti. 🧡',
+    'Te quiero mucho. Vamos con todo hoy. 🧡',
+  ];
+
+  let today = dayKey(new Date());
+  const tasks = () => (state.days[today] ||= []);
+  const sorted = list => [...list].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (a.time && b.time) return toMin(a.time) - toMin(b.time);
+    if (a.time) return -1;
+    if (b.time) return 1;
+    return a.created - b.created;
+  });
+  const nextTask = () => sorted(tasks()).find(t => !t.done);
+
+  const quoteOfDay = () => { const q = quotes(); const n = Number(today.replaceAll('-', '')); return q.at(n % q.length); };
+
+  const checkSvg = '<svg viewBox="0 0 14 14"><path d="M2.5 7.5l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  // ---------- render ----------
+  function render() {
+    const d = new Date();
+    $('hello').textContent = state.settings.name ? `Hola, ${state.settings.name}` : 'Hoy';
+    const ds = d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+    $('date').textContent = ds.charAt(0).toUpperCase() + ds.slice(1);
+    $('quote').textContent = quoteOfDay();
+
+    const list = tasks();
+    const done = list.filter(t => t.done).length;
+    $('countText').textContent = list.length ? `${done} de ${list.length} hechas` : 'Lista de hoy';
+    $('bar').style.width = list.length ? `${(done / list.length) * 100}%` : '0';
+
+    const next = nextTask();
+    const body = $('nowBody');
+    body.innerHTML = '';
+    if (next) {
+      if (next.time) {
+        const w = document.createElement('div');
+        w.className = 'when';
+        w.textContent = next.time;
+        body.append(w);
+      }
+      const t = document.createElement('div');
+      t.className = 'task';
+      t.textContent = next.text;
+      const b = document.createElement('button');
+      b.className = 'primary';
+      b.textContent = 'Listo';
+      b.onclick = e => complete(next.id, e);
+      body.append(t, b);
+    } else if (list.length) {
+      const wrap = document.createElement('div');
+      wrap.className = 'alldone';
+      const img = document.createElement('img');
+      img.src = 'gata.jpg'; img.alt = ''; img.onerror = () => img.remove();
+      const h = document.createElement('div');
+      h.className = 'task'; h.style.margin = '0 0 4px';
+      h.textContent = 'Terminaste todo por hoy.';
+      const p = document.createElement('div');
+      p.style.color = 'var(--muted)';
+      p.textContent = `Estoy muy orgullosa de ti. Te quiero mucho. 🧡 Ahora descansa, ${catLower()} te espera. 🐾`;
+      wrap.append(img, h, p);
+      body.append(wrap);
+    } else {
+      const p = document.createElement('p');
+      p.className = 'empty';
+      p.textContent = 'Empieza con una sola cosa. Solo una.';
+      body.append(p);
+    }
+
+    const ul = $('list');
+    ul.innerHTML = '';
+    for (const t of sorted(list)) {
+      const li = document.createElement('li');
+      if (t.done) li.className = 'done';
+      const c = document.createElement('button');
+      c.className = 'check';
+      c.setAttribute('aria-label', t.done ? 'Marcar como pendiente' : 'Marcar como hecha');
+      c.innerHTML = checkSvg;
+      c.onclick = e => t.done ? undo(t.id) : complete(t.id, e);
+      const s = document.createElement('span');
+      s.className = 'text';
+      s.textContent = t.text;
+      li.append(c, s);
+      if (t.time) {
+        const tm = document.createElement('span');
+        tm.className = 'time';
+        tm.textContent = t.time;
+        li.append(tm);
+      }
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.setAttribute('aria-label', 'Borrar');
+      del.textContent = '✕';
+      del.onclick = () => { state.days[today] = tasks().filter(x => x.id !== t.id); save(); render(); };
+      li.append(del);
+      ul.append(li);
+    }
+
+    renderLeftover();
+    renderNotifStatus();
+    renderQuiz();
+  }
+
+  function renderLeftover() {
+    const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
+    const pending = prev ? state.days[prev].filter(t => !t.done) : [];
+    const show = pending.length && state.dismissed !== today;
+    $('leftover').hidden = !show;
+    if (show) $('leftoverText').textContent = `Quedaron ${pending.length} pendiente${pending.length > 1 ? 's' : ''} de antes. No pasa nada.`;
+  }
+
+  function renderNotifStatus() {
+    const st = $('notifStatus'), btn = $('enableNotif');
+    if (!('Notification' in window)) { st.textContent = 'Te aviso dentro de la página.'; btn.hidden = true; return; }
+    if (Notification.permission === 'granted') { st.textContent = 'Notificaciones activadas'; btn.hidden = true; }
+    else if (Notification.permission === 'denied') { st.textContent = 'Notificaciones bloqueadas en el navegador'; btn.hidden = true; }
+    else { st.textContent = 'Notificaciones apagadas'; btn.hidden = false; }
+  }
+
+  // ---------- acciones ----------
+  function complete(id, ev) {
+    const t = tasks().find(x => x.id === id);
+    if (!t) return;
+    t.done = true;
+    save();
+    celebrate(ev);
+    const allDone = tasks().every(x => x.done);
+    if (allDone) toast('Terminaste todo por hoy.', 'Estoy muy orgullosa de ti. Te quiero mucho. 🧡');
+    else toast(...sometimesLove(cheers(), 0.25));
+    render();
+  }
+  function undo(id) {
+    const t = tasks().find(x => x.id === id);
+    if (t) { t.done = false; save(); render(); }
+  }
+
+  $('addForm').onsubmit = e => {
+    e.preventDefault();
+    const text = $('newText').value.trim();
+    if (!text) return;
+    tasks().push({ id: Date.now() + Math.random(), text, time: $('newTime').value || null, done: false, created: Date.now(), pre: false, at: false });
+    $('newText').value = ''; $('newTime').value = '';
+    save(); render(); $('newText').focus();
+  };
+  $('clearDone').onclick = () => { state.days[today] = tasks().filter(t => !t.done); save(); render(); };
+  $('bringOver').onclick = () => {
+    const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
+    for (const t of state.days[prev].filter(t => !t.done)) {
+      tasks().push(Object.assign({}, t, { id: Date.now() + Math.random(), pre: false, at: false, created: Date.now() }));
+      t.done = true;
+    }
+    save(); render(); toast('Listo, las pasé a hoy.', 'Una a la vez.');
+  };
+  $('dismissLeftover').onclick = () => { state.dismissed = today; save(); render(); };
+
+  const bindText = (id, key) => { $(id).value = state.settings[key]; $(id).oninput = e => { state.settings[key] = e.target.value.trim(); save(); render(); }; };
+  bindText('name', 'name');
+  bindText('catName', 'catName');
+  const bindSelect = (id, key, stamp) => { $(id).value = String(state.settings[key]); $(id).onchange = e => { state.settings[key] = Number(e.target.value); state[stamp] = Date.now(); save(); }; };
+  bindSelect('nudge', 'nudge', 'lastNudge');
+  bindSelect('pause', 'pause', 'lastPause');
+  $('theme').value = state.settings.theme;
+  $('theme').onchange = e => { state.settings.theme = e.target.value; applyTheme(); save(); };
+  $('quizOn').checked = state.settings.quiz;
+  $('quizOn').onchange = e => { state.settings.quiz = e.target.checked; save(); };
+  $('quizNow').onclick = () => { newQuiz(); save(); render(); $('quizCard').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+  $('sound').checked = state.settings.sound;
+  $('sound').onchange = e => { state.settings.sound = e.target.checked; save(); };
+  $('enableNotif').onclick = async () => {
+    try { await Notification.requestPermission(); } catch (e) {}
+    renderNotifStatus();
+    if (Notification.permission === 'granted') notify('Listo.', 'Así se verán tus recordatorios. 🐾');
+  };
+
+  // ---------- recordatorios ----------
+  let audioCtx;
+  function chime() {
+    if (!state.settings.sound) return;
+    try {
+      audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+      [[0, 784], [0.16, 1047]].forEach(([delay, f]) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        const t0 = audioCtx.currentTime + delay;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.15, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.6);
+        o.connect(g).connect(audioCtx.destination);
+        o.start(t0); o.stop(t0 + 0.65);
+      });
+    } catch (e) {}
+  }
+  document.addEventListener('click', () => { try { audioCtx ||= new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {} }, { once: true });
+
+  let titleTimer;
+  function notify(title, body) {
+    chime();
+    toast(title, body);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try { const n = new Notification(title, { body }); n.onclick = () => { window.focus(); n.close(); }; } catch (e) {}
+    }
+    if (document.hidden) {
+      clearInterval(titleTimer);
+      let on = false;
+      titleTimer = setInterval(() => { document.title = (on = !on) ? '🐾 ' + title : 'Mi día'; }, 1200);
+    }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { clearInterval(titleTimer); document.title = 'Mi día'; } });
+
+  function tick() {
+    const d = new Date();
+    if (dayKey(d) !== today) { today = dayKey(d); render(); }
+    const m = d.getHours() * 60 + d.getMinutes();
+    const awake = d.getHours() >= 8 && d.getHours() < 22;
+    let changed = false;
+
+    for (const t of tasks()) {
+      if (t.done || !t.time) continue;
+      const tm = toMin(t.time);
+      if (!t.pre && m >= tm - 10 && m < tm) { t.pre = true; changed = true; notify('En 10 minutos', t.text); }
+      if (!t.at && m >= tm && m <= tm + 5) {
+        t.at = true; t.pre = true; changed = true;
+        if (state.settings.quiz) {
+          newQuiz();
+          notify('Es hora', `${t.text} · Te dejé una pregunta 🧠`);
+          render();
+        } else {
+          notify('Es hora', t.text);
+        }
+      }
+    }
+
+    const pending = tasks().filter(t => !t.done);
+    const nudgeEvery = state.settings.nudge * 60000;
+    if (nudgeEvery && awake && pending.length && Date.now() - state.lastNudge >= nudgeEvery) {
+      if (state.lastNudge) {
+        const n = nextTask();
+        notify(`Sin presión: ${pending.length === 1 ? 'te queda 1' : `te quedan ${pending.length}`}`, n ? `La siguiente es: ${n.text}` : '');
+      }
+      state.lastNudge = Date.now(); changed = true;
+    }
+
+    const pauseEvery = state.settings.pause * 60000;
+    if (pauseEvery && awake && Date.now() - state.lastPause >= pauseEvery) {
+      if (state.lastPause) notify(...sometimesLove(pauses(), 0.2));
+      state.lastPause = Date.now(); changed = true;
+    }
+
+    if (changed) save();
+  }
+
+  // ---------- detalles ----------
+  function toast(title, sub) {
+    const t = $('toast');
+    t.innerHTML = '';
+    t.append(document.createTextNode(title));
+    if (sub) { const s = document.createElement('small'); s.textContent = sub; t.append(s); }
+    t.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove('show'), 4000);
+  }
+  function celebrate(ev) {
+    const x = ev && ev.clientX ? ev.clientX : innerWidth / 2, y = ev && ev.clientY ? ev.clientY : innerHeight / 2;
+    for (let i = 0; i < 8; i++) {
+      const s = document.createElement('span');
+      s.className = 'burst';
+      s.textContent = i % 2 ? '🐾' : '✨';
+      s.style.left = x + 'px'; s.style.top = y + 'px';
+      s.style.setProperty('--dx', (Math.random() * 160 - 80) + 'px');
+      s.style.setProperty('--dy', (Math.random() * -140 - 30) + 'px');
+      s.style.setProperty('--r', (Math.random() * 90 - 45) + 'deg');
+      document.body.append(s);
+      setTimeout(() => s.remove(), 900);
+    }
+  }
+
+  render();
+  tick();
+  setInterval(tick, 20000);
+})();
+</script>
+</body>
+</html>
