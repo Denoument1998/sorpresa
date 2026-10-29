@@ -303,8 +303,16 @@
         <button class="link" id="quizNow">Jugar una ahora</button>
       </div>
       <div class="row">
-        <label for="sound">Sonido</label>
+        <label for="sound">Sonido de los recordatorios</label>
         <input id="sound" type="checkbox">
+      </div>
+      <div class="row">
+        <label for="sfxOn">Efectos de sonido (preguntas y mensajes)</label>
+        <input id="sfxOn" type="checkbox">
+      </div>
+      <div class="row">
+        <label for="petSoundOn">Sonido de la mascota cuando aparece</label>
+        <input id="petSoundOn" type="checkbox">
       </div>
       <div class="row">
         <span id="notifStatus" style="color:var(--muted); font-size:15px"></span>
@@ -326,7 +334,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
 
   let state = {
-    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
+    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, sfx: true, petSound: true, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
     lastNudge: 0, lastPause: 0, dismissed: '', quiz: null, score: { ok: 0, total: 0 }, asked: [], goals: {}, lastGoalNag: 0
   };
   try {
@@ -484,6 +492,7 @@
     if (document.hidden) { walkQueued = true; return; }
     if (walking) return;
     walking = true;
+    petSound();
     const scale = 5, fw = 18 * scale;
     const frames = [GORDITA_A, GORDITA_B].map(f => { const c = sprite([[f, 0, 0]], 18, 11, scale); c.classList.add('walker'); return c; });
     const holder = document.createElement('div');
@@ -650,6 +659,7 @@
     state.score.total++;
     const ok = opt === QUIZ.at(state.quiz.i)[1];
     if (ok) state.score.ok++;
+    sfx(ok ? 'correct' : 'wrong');
     save(); render();
     if (ok) toast('¡Correcto! 🧠', pick(['Qué crack.', 'Sabía que la sabías.', `${cat()} está impresionada. 🐾`]));
   }
@@ -1024,6 +1034,7 @@
     if (!nxt) { complete(taskId, ev); return; }
     save();
     celebrate(ev);
+    sfx('step');
     toast('Paso listo ✓', `Ahora sigue: ${nxt.text}`);
     render();
   }
@@ -1082,6 +1093,7 @@
   function showCheckin(t) {
     if (checkinOpen) { checkinQueue.push(t); return; }
     checkinOpen = true;
+    petSound();
     const ov = document.createElement('div');
     ov.className = 'checkin-overlay';
     const card = document.createElement('div');
@@ -1178,6 +1190,7 @@
     save();
     celebrate(ev);
     const allDone = tasks().every(x => x.done);
+    sfx(allDone ? 'fanfare' : 'sparkle');
     if (allDone) toast('Terminaste todo por hoy.', allDoneMsgs().at(dayNum() % allDoneMsgs().length));
     else toast(...sometimesLove(cheers(), 0.25));
     render();
@@ -1251,6 +1264,10 @@
   $('quizNow').onclick = () => { newQuiz(); save(); render(); $('quizCard').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
   $('sound').checked = state.settings.sound;
   $('sound').onchange = e => { state.settings.sound = e.target.checked; save(); };
+  $('sfxOn').checked = state.settings.sfx;
+  $('sfxOn').onchange = e => { state.settings.sfx = e.target.checked; save(); if (e.target.checked) sfx('sparkle'); };
+  $('petSoundOn').checked = state.settings.petSound;
+  $('petSoundOn').onchange = e => { state.settings.petSound = e.target.checked; save(); if (e.target.checked) petSound(); };
   $('enableNotif').onclick = async () => {
     try { await Notification.requestPermission(); } catch (e) {}
     renderNotifStatus();
@@ -1279,7 +1296,47 @@
       });
     } catch (e) {}
   }
-  document.addEventListener('click', () => { try { audioCtx ||= new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {} }, { once: true });
+  // ---------- efectos de sonido (sintetizados, sin archivos) ----------
+  const ac = () => { audioCtx ||= new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); return audioCtx; };
+  function tone(f0, at, dur, { type = 'sine', vol = 0.12, f1 = null, f2 = null, lp = 0 } = {}) {
+    const a = ac(), t0 = a.currentTime + at;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    if (f1) o.frequency.linearRampToValueAtTime(f1, t0 + dur * (f2 ? 0.35 : 1));
+    if (f2) o.frequency.linearRampToValueAtTime(f2, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + Math.min(0.03, dur / 4));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g);
+    if (lp) { const fl = a.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = lp; g.connect(fl); fl.connect(a.destination); }
+    else g.connect(a.destination);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  // efectos: respuesta correcta, incorrecta, mensajes lindos, pasos y dia completo
+  function sfx(kind) {
+    if (!state.settings.sfx) return;
+    try {
+      if (kind === 'correct') [659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.22, { type: 'triangle', vol: 0.14 }));
+      if (kind === 'wrong') { tone(330, 0, 0.3, { f1: 220, vol: 0.1 }); tone(196, 0.28, 0.25, { vol: 0.08 }); }
+      if (kind === 'sparkle') [1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, 0.2, { vol: 0.06 }));
+      if (kind === 'step') [784, 1047].forEach((f, i) => tone(f, i * 0.08, 0.18, { type: 'triangle', vol: 0.1 }));
+      if (kind === 'fanfare') { [523, 659, 784].forEach((f, i) => tone(f, i * 0.12, 0.2, { type: 'triangle', vol: 0.13 })); tone(1047, 0.36, 0.6, { type: 'triangle', vol: 0.14 }); }
+    } catch (e) {}
+  }
+  // la mascota hace su sonido cuando aparece
+  function petSound() {
+    if (!state.settings.petSound) return;
+    const type = state.settings.petType || 'gato';
+    try {
+      if (type === 'gato') { const p = 0.9 + Math.random() * 0.25; tone(450 * p, 0, 0.6, { type: 'sawtooth', vol: 0.09, f1: 760 * p, f2: 500 * p, lp: 1400 }); }
+      if (type === 'perro') [0, 0.22].forEach(t => tone(320, t, 0.16, { type: 'square', vol: 0.09, f1: 150, lp: 1100 }));
+      if (type === 'conejo') tone(300, 0, 0.3, { vol: 0.12, f1: 900, f2: 620 });
+      if (type === 'hamster') [0, 0.1, 0.2].forEach(t => tone(1800, t, 0.07, { vol: 0.07, f1: 2500 }));
+      if (type === 'ave') [0, 0.1, 0.2, 0.42].forEach(t => tone(2400, t, 0.08, { vol: 0.06, f1: 3600 }));
+    } catch (e) {}
+  }
+
 
   let titleTimer;
   function notify(title, body) {
