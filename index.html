@@ -1573,12 +1573,14 @@
     return { base: toImg(rows), step: toImg(step), blink: toImg(blink), flap: toImg(flap) };
   }
   const PET_ACTIONS = {
-    gato: ['steps', 'stretch', 'sit', 'clean'],
-    perro: ['steps', 'sit', 'hop', 'stretch'],
-    conejo: ['hop', 'clean', 'sit'],
-    hamster: ['clean', 'steps', 'sit'],
-    ave: ['flap', 'hop', 'steps'],
+    gato: ['steps', 'stretch', 'sit', 'clean', 'hearts', 'play'],
+    perro: ['steps', 'sit', 'hop', 'stretch', 'hearts', 'play'],
+    conejo: ['hop', 'clean', 'sit', 'hearts', 'play'],
+    hamster: ['clean', 'steps', 'sit', 'hearts', 'play'],
+    ave: ['flap', 'hop', 'steps', 'hearts', 'play'],
   };
+  // bolita de lana para jugar
+  const YARN = ['.rrr.', 'rwrrr', 'rrwrr', 'rrrwr', '.rrr.'];
   // cada tantos segundos hace una accion suave; si el enfoque esta en pausa, solo respira
   function animatePet(img, win, frames, kind) {
     img.src = frames.base;
@@ -1587,6 +1589,18 @@
     const acts = PET_ACTIONS[kind] || PET_ACTIONS.gato;
     const wait = ms => new Promise(r => win.setTimeout(r, ms));
     const T = (tr, ms) => { img.style.transition = `transform ${ms}ms ease-in-out`; img.style.transform = tr; };
+    // corazoncitos y bolita se dibujan alrededor de la mascota
+    const holder = img.parentElement, doc = img.ownerDocument;
+    if (holder) holder.style.position = 'relative';
+    const heartSrc = sprite([[SMALL_HEART, 0, 0]], 5, 4, 3).toDataURL();
+    const yarnSrc = sprite([[YARN, 0, 0]], 5, 5, 3).toDataURL();
+    const spawn = (src, css) => {
+      const e = doc.createElement('img');
+      e.src = src;
+      e.style.cssText = 'position:absolute;image-rendering:pixelated;pointer-events:none;width:auto;animation:none;' + css;
+      (holder || img).append(e);
+      return e;
+    };
     (async () => {
       await wait(2500);
       while (img.isConnected) {
@@ -1604,6 +1618,24 @@
           img.src = frames.base; T('none', 250); await wait(300);
         } else if (a === 'hop') {
           for (let i = 0; i < 2; i++) { T('translateY(-14px)', 180); await wait(200); T('none', 180); await wait(260); }
+        } else if (a === 'hearts') {
+          T('translateY(-5px)', 200);
+          for (let i = 0; i < 4; i++) {
+            const h = spawn(heartSrc, `left:calc(50% + ${Math.round(Math.random() * 30 - 15)}px);top:0;opacity:1;transition:transform 1.4s ease-out, opacity 1.4s ease-out;`);
+            win.setTimeout(() => { h.style.transform = `translate(${Math.round(Math.random() * 20 - 10)}px, -34px)`; h.style.opacity = '0'; }, 30);
+            win.setTimeout(() => h.remove(), 1500);
+            await wait(350);
+          }
+          T('none', 200); await wait(700);
+        } else if (a === 'play') {
+          const b = spawn(yarnSrc, 'left:calc(50% + 48px);bottom:2px;transition:transform 0.6s ease-out, opacity 0.6s;');
+          await wait(60);
+          b.style.transform = 'translateX(-22px) rotate(-360deg)'; await wait(650);
+          for (const x of [6, 12]) { img.src = frames.step; T(`translateX(${x}px)`, 220); await wait(240); img.src = frames.base; await wait(160); }
+          T('translate(14px, -10px)', 160); await wait(180); T('translateX(14px)', 160); await wait(220);
+          b.style.transition = 'transform 0.9s ease-out, opacity 0.9s ease-out';
+          b.style.transform = 'translateX(30px) rotate(540deg)'; b.style.opacity = '0';
+          await wait(700); T('none', 400); await wait(450); b.remove();
         } else if (a === 'flap') {
           for (let i = 0; i < 8; i++) { img.src = i % 2 ? frames.base : frames.flap; T(`translateY(${i % 2 ? 0 : -5}px)`, 120); await wait(150); }
           img.src = frames.base; T('none', 150); await wait(200);
@@ -1716,6 +1748,9 @@ button{font:inherit;border:0;border-radius:10px;padding:7px 14px;margin:2px;back
     d.head.append(st);
     d.title = 'Te acompaño';
     const img = d.createElement('img');
+    const pw = d.createElement('div');
+    pw.style.cssText = 'position:relative;display:flex;justify-content:center;width:100%';
+    pw.append(img);
     animatePet(img, w, petFrames(6), petKind());
     const tm = d.createElement('div'); tm.className = 't';
     const sub = d.createElement('div'); sub.className = 's';
@@ -1723,7 +1758,7 @@ button{font:inherit;border:0;border-radius:10px;padding:7px 14px;margin:2px;back
     const p = d.createElement('button'); p.onclick = () => pauseFocus();
     const x = d.createElement('button'); x.textContent = 'Terminar'; x.onclick = () => stopFocus();
     row.append(p, x);
-    d.body.append(img, tm, sub, row);
+    d.body.append(pw, tm, sub, row);
     const upd = () => {
       if (!state.focus) return;
       tm.textContent = fmt(focusLeft());
