@@ -164,7 +164,18 @@
   .fact-day { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
   .plan-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .plan-btns button { background: var(--bg); color: var(--ink); min-width: 46px; font-weight: 600; }
-  .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .week-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; margin: 14px 0 6px; }
+  .week-bars .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+  .week-bars .bar { width: 100%; max-width: 34px; border-radius: 8px 8px 4px 4px; background: var(--accent); min-height: 4px; transition: height .4s; }
+  .week-bars .bar.empty { background: var(--line); }
+  .week-bars .bar.today { background: var(--ok); }
+  .week-bars .n { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .week-bars .d { font-size: 12px; color: var(--muted); text-transform: capitalize; }
+  .week-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .week-stats div { background: var(--bg); border-radius: 12px; padding: 10px 12px; }
+  .week-stats b { display: block; font-size: 20px; }
+  .week-stats span { color: var(--muted); font-size: 13px; }
+  .week-msg { margin: 12px 0 0; color: var(--muted); font-size: 15px; }  .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
 
   .checkin-overlay {
     position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px;
@@ -264,6 +275,13 @@
     <div class="progress"><div id="bar"></div></div>
     <div class="goal-line" id="goalLine"></div>
     <ul id="list"></ul>
+  </div>
+
+  <div class="card">
+    <details id="weekBox">
+      <summary>Tu semana 📊</summary>
+      <div id="weekBody"></div>
+    </details>
   </div>
 
   <div class="card">
@@ -1036,6 +1054,7 @@
     renderLeftover();
     renderNotifStatus();
     renderQuiz();
+    renderWeek();
   }
 
   // ---------- tareas con pasos ----------
@@ -1314,6 +1333,50 @@
     if (changed) save();
   }
 
+  // ---------- resumen de la semana (ultimos 7 dias) ----------
+  function renderWeek() {
+    const box = $('weekBody');
+    if (!box) return;
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const k = dayKey(d), l = state.days[k] || [];
+      days.push({ k, d, done: l.filter(x => x.done).length, total: l.length, focus: (state.focusLog || {})[k] || 0 });
+    }
+    const max = Math.max(1, ...days.map(x => x.done));
+    const totalDone = days.reduce((s, x) => s + x.done, 0);
+    const totalFocus = days.reduce((s, x) => s + x.focus, 0);
+    const fullDays = days.filter(x => x.total && x.done === x.total).length;
+    const best = days.reduce((a, b) => (b.done > a.done ? b : a), days[0]);
+    const bars = document.createElement('div');
+    bars.className = 'week-bars';
+    for (const x of days) {
+      const col = document.createElement('div'); col.className = 'col';
+      const n = document.createElement('div'); n.className = 'n'; n.textContent = x.done || '';
+      const bar = document.createElement('div');
+      bar.className = 'bar' + (x.done ? '' : ' empty') + (x.k === today ? ' today' : '');
+      bar.style.height = x.done ? `${Math.round((x.done / max) * 85)}%` : '4px';
+      bar.title = `${x.done} de ${x.total} tareas`;
+      const lbl = document.createElement('div'); lbl.className = 'd';
+      lbl.textContent = x.k === today ? 'hoy' : x.d.toLocaleDateString('es', { weekday: 'short' }).replace('.', '');
+      col.append(n, bar, lbl); bars.append(col);
+    }
+    const stats = document.createElement('div');
+    stats.className = 'week-stats';
+    const stat = (big, small) => { const s = document.createElement('div'); const b = document.createElement('b'); b.textContent = big; const sp = document.createElement('span'); sp.textContent = small; s.append(b, sp); stats.append(s); };
+    stat(totalDone, totalDone === 1 ? 'tarea hecha' : 'tareas hechas');
+    stat(fullDays, fullDays === 1 ? 'día con todo listo' : 'días con todo listo');
+    stat(totalFocus ? `${totalFocus} min` : '0 min', 'de enfoque');
+    const sk = streak();
+    stat(sk ? `🔥 ${sk}` : '—', sk === 1 ? 'día de racha' : 'días de racha');
+    const msg = document.createElement('p');
+    msg.className = 'week-msg';
+    const bestName = best.k === today ? 'hoy' : 'el ' + best.d.toLocaleDateString('es', { weekday: 'long' });
+    msg.textContent = !totalDone ? 'Esta semana recién empieza. Una tarea y arrancamos. 🐾'
+      : totalDone >= 20 ? `¡Semanón! Tu mejor día fue ${bestName}, con ${best.done} tareas. Lo estás haciendo increíble. ✨`
+      : `Tu mejor día fue ${bestName}, con ${best.done} ${best.done === 1 ? 'tarea' : 'tareas'}. Cada paso cuenta. 💪`;
+    box.replaceChildren(bars, stats, msg);
+  }
   function renderLeftover() {
     const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
     const pending = prev ? state.days[prev].filter(t => !t.done) : [];
@@ -1782,6 +1845,7 @@
     if (!f) return;
     state.focus = null;
     state.focusAsk = { taskId: f.taskId, mins: f.mins };
+    (state.focusLog ||= {})[today] = (state.focusLog[today] || 0) + f.mins;
     save(); closeFloat(); render();
     notify('¡Lo hiciste súper! 🎉', `${f.mins} minutos de enfoque. ¡Lo estás haciendo increíble!`);
     sfx('fanfare');
