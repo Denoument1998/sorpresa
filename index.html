@@ -141,6 +141,23 @@
   .walker-heart { position: fixed; z-index: 21; pointer-events: none; font-size: 18px; animation: fly 1.2s ease-out forwards; }
   .alldone .cats { margin: 6px auto 14px; animation: bob 2.2s ease-in-out infinite; }
   @keyframes bob { 50% { transform: translateY(-5px); } }
+  .focus-link { display: block; margin: 10px auto 0; background: none; color: var(--muted); font-size: 15px; padding: 6px 10px; }
+  .focus-chips { display: flex; gap: 8px; justify-content: center; margin: 12px 0 2px; flex-wrap: wrap; }
+  .focus-chips button { background: var(--bg); color: var(--ink); font-weight: 600; min-width: 64px; }
+  .focus { text-align: center; }
+  .focus .timer { font-size: 54px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; margin: 2px 0; }
+  .focus .pet-calm { display: flex; justify-content: center; margin: 8px 0 6px; }
+  .focus .pet-calm .pix { animation: breathe 4s ease-in-out infinite; transform-origin: 50% 100%; }
+  @keyframes breathe { 50% { transform: scale(1.05, 0.96); } }
+  .focus .focus-sub { color: var(--muted); font-size: 15px; }
+  .focus .focus-acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .focus .focus-acts button { background: var(--bg); color: var(--ink); }
+  .focus .focus-acts .primary { background: var(--accent); color: #fff; width: auto; padding: 10px 18px; font-size: 16px; }
+  .text { cursor: text; }
+  li.done .text { cursor: default; }
+  @media (prefers-reduced-motion: reduce) {
+    .focus .pet-calm .pix, .alldone .cats { animation: none; }
+  }
   .quiz-row { display: flex; gap: 14px; align-items: center; }
   .quiz-row .pix { flex: 0 0 auto; }
   .fact-day { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
@@ -491,7 +508,7 @@
   // la Gordita entra caminando, juega un ratito y se va
   let walkQueued = false, walking = false;
   function walkCat() {
-    if (!state.settings.pet) return;
+    if (!state.settings.pet || focusing()) return;
     if (document.hidden) { walkQueued = true; return; }
     if (walking) return;
     walking = true;
@@ -849,7 +866,11 @@
     const next = nextTask();
     const body = $('nowBody');
     body.innerHTML = '';
-    if (next) {
+    if (state.focusAsk && !tasks().some(x => x.id === state.focusAsk.taskId && !x.done)) state.focusAsk = null;
+    if (state.focus && !tasks().some(x => x.id === state.focus.taskId)) { state.focus = null; closeFloat(); }
+    if (state.focus || state.focusAsk) {
+      renderFocusBox(body);
+    } else if (next) {
       if (next.time) {
         const w = document.createElement('div');
         w.className = 'when';
@@ -871,6 +892,9 @@
       b.textContent = step ? 'Listo, siguiente paso' : 'Listo';
       b.onclick = e => step ? completeStep(next.id, step.id, e) : complete(next.id, e);
       body.append(t, b);
+      const fl = Object.assign(document.createElement('button'), { className: 'focus-link', textContent: '🐾 Acompáñame mientras lo hago' });
+      fl.onclick = () => fl.replaceWith(focusChips(next.id));
+      body.append(fl);
     } else if (list.length) {
       const wrap = document.createElement('div');
       wrap.className = 'alldone';
@@ -908,6 +932,31 @@
     ul.innerHTML = '';
     for (const t of sorted(list)) {
       const li = document.createElement('li');
+      if (editingId === t.id) {
+        const f = document.createElement('form');
+        f.className = 'step-add'; f.style.flex = '1'; f.style.margin = '0';
+        const ti = Object.assign(document.createElement('input'), { type: 'text', value: t.text });
+        const hi = Object.assign(document.createElement('input'), { type: 'time', value: t.time || '' });
+        hi.style.flex = '0 0 110px';
+        const ok = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Guardar' });
+        const no = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Cancelar' });
+        no.style.background = 'none'; no.style.color = 'var(--muted)';
+        f.append(ti, hi, ok, no);
+        f.onsubmit = e => {
+          e.preventDefault();
+          const nt = ti.value.trim();
+          if (!nt) return;
+          const nh = hi.value || null;
+          if (nh !== t.time) { t.pre = false; t.at = false; t.checked = false; t.snoozeUntil = 0; }
+          t.text = nt; t.time = nh; editingId = null;
+          save(); render(); toast('Tarea actualizada.', '');
+        };
+        no.onclick = () => { editingId = null; render(); };
+        ti.onkeydown = e => { if (e.key === 'Escape') no.click(); };
+        li.append(f); ul.append(li);
+        setTimeout(() => ti.focus(), 0);
+        continue;
+      }
       if (t.done) li.className = 'done';
       const c = document.createElement('button');
       c.className = 'check';
@@ -917,6 +966,7 @@
       const s = document.createElement('span');
       s.className = 'text';
       s.textContent = t.text;
+      if (!t.done) { s.title = 'Toca para editar'; s.onclick = () => { editingId = t.id; render(); }; }
       const steps = t.steps || [];
       if (steps.length) {
         const bd = document.createElement('span');
@@ -954,7 +1004,16 @@
   }
 
   // ---------- tareas con pasos ----------
-  const openSteps = new Set();
+  // mensajes de apoyo cuando una tarea cuesta (no de celebracion)
+  const cheerUp = () => [
+    'Tú puedes con esto. Te quiero mucho. 🧡',
+    'No pasa nada si hoy va más lento. Igual estoy orgullosa de ti. 🧡',
+    'Confío en ti, siempre. 🧡',
+    'Un pasito a la vez está bien. Te quiero. 🧡',
+    'Respira. Vas a poder, y yo estoy de tu lado. 🧡',
+    `${cat()} y yo creemos en ti. 🐾🧡`,
+  ];  const openSteps = new Set();
+  let editingId = null;
   const currentStep = t => (t.steps || []).find(s => !s.done);
   const focusStepInput = id => setTimeout(() => document.querySelector(`[data-step-input="${id}"]`)?.focus(), 0);
 
@@ -1133,7 +1192,7 @@
       card.replaceChildren(who(pick(replies)));
       const tip = document.createElement('p');
       tip.className = 'tip';
-      tip.textContent = pick(love).join(' ');
+      tip.textContent = pick(cheerUp());
       const acts = document.createElement('div');
       acts.className = 'acts';
       const ok = Object.assign(document.createElement('button'), { className: 'primary', textContent: action === 'go' ? '¡Vamos!' : '¡Gracias! 🐾' });
@@ -1438,7 +1497,7 @@
 
     const pending = tasks().filter(t => !t.done);
     const nudgeEvery = state.settings.nudge * 60000;
-    if (nudgeEvery && awake && pending.length && Date.now() - state.lastNudge >= nudgeEvery) {
+    if (nudgeEvery && awake && !focusing() && pending.length && Date.now() - state.lastNudge >= nudgeEvery) {
       if (state.lastNudge) {
         const n = nextTask();
         notify(`Sin presión: ${pending.length === 1 ? 'te queda 1' : `te quedan ${pending.length}`}`, n ? `La siguiente es: ${n.text}` : '');
@@ -1447,13 +1506,12 @@
     }
 
     const pauseEvery = state.settings.pause * 60000;
-    if (pauseEvery && awake && Date.now() - state.lastPause >= pauseEvery) {
+    if (pauseEvery && awake && !focusing() && Date.now() - state.lastPause >= pauseEvery) {
       if (state.lastPause) notify(...sometimesLove(pauses(), 0.2));
       state.lastPause = Date.now(); changed = true;
     }
 
-    goalNag(30);
-    checkLate();
+    if (!focusing()) { goalNag(30); checkLate(); }
     if (changed) save();
   }
 
@@ -1482,7 +1540,143 @@
     }
   }
 
-  window.miDia = { walkCat, newQuiz: () => { newQuiz(); save(); render(); }, checkin: () => { const t = tasks().find(x => !x.done); if (t) showCheckin(t); } }; // para probar desde la consola
+  // ---------- modo Acompáñame (enfoque con temporizador) ----------
+  // La mascota acompaña dentro de la app. En Chrome/Edge de compu además puede flotar encima de otras apps
+  // con Document Picture-in-Picture. Durante el enfoque se silencian empujoncitos, pausas y paseos.
+  const calmPet = scale => sprite([[GORDITA_SIT, 0, 0]], 11, 12, scale);
+  let floatWin = null;
+  const focusing = () => !!state.focus && !state.focus.paused;
+  const focusLeft = () => { const f = state.focus; if (!f) return 0; return f.paused ? f.left : Math.max(0, f.end - Date.now()); };
+  const fmt = ms => { const s = Math.ceil(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+  const canFloat = () => 'documentPictureInPicture' in window;
+
+  function focusChips(taskId) {
+    const box = document.createElement('div');
+    const q = document.createElement('div');
+    q.className = 'of'; q.style.textAlign = 'center'; q.style.marginTop = '12px';
+    q.textContent = '¿Cuánto tiempo te acompaño?';
+    const row = document.createElement('div');
+    row.className = 'focus-chips';
+    for (const m of [5, 10, 15, 25]) {
+      const b = Object.assign(document.createElement('button'), { textContent: `${m} min` });
+      b.onclick = () => startFocus(m, taskId);
+      row.append(b);
+    }
+    box.append(q, row);
+    return box;
+  }
+  function startFocus(mins, taskId) {
+    state.focus = { taskId, mins, end: Date.now() + mins * 60000, left: 0, paused: false };
+    state.focusAsk = null;
+    save(); render();
+    toast('¡Vamos!', `${cat()} te acompaña ${mins} minutos. 🐾`);
+  }
+  function pauseFocus() {
+    const f = state.focus;
+    if (!f) return;
+    if (f.paused) { f.end = Date.now() + f.left; f.paused = false; }
+    else { f.left = Math.max(0, f.end - Date.now()); f.paused = true; }
+    save(); render();
+  }
+  function stopFocus() {
+    state.focus = null;
+    save(); closeFloat(); render();
+  }
+  function finishFocus() {
+    const f = state.focus;
+    if (!f) return;
+    state.focus = null;
+    state.focusAsk = { taskId: f.taskId, mins: f.mins };
+    save(); closeFloat(); render();
+    notify(`¡Lo lograste! ${f.mins} minutos 🎉`, pick(love).join(' '));
+    sfx('fanfare');
+  }
+  function renderFocusBox(body) {
+    const f = state.focus, ask = state.focusAsk;
+    const task = tasks().find(x => x.id === (f ? f.taskId : ask.taskId));
+    const wrap = document.createElement('div');
+    wrap.className = 'focus';
+    const of = document.createElement('div');
+    of.className = 'of';
+    of.textContent = f ? `Enfocado en: ${task ? task.text : ''}` : (task ? task.text : '');
+    const pet = document.createElement('div');
+    pet.className = 'pet-calm';
+    pet.append(calmPet(6));
+    const acts = document.createElement('div');
+    acts.className = 'focus-acts';
+    const btn = (label, fn, cls) => { const b = Object.assign(document.createElement('button'), { textContent: label }); if (cls) b.className = cls; b.onclick = fn; acts.append(b); };
+    if (f) {
+      const tm = document.createElement('div');
+      tm.className = 'timer'; tm.id = 'focusTimer';
+      tm.textContent = fmt(focusLeft());
+      const sub = document.createElement('div');
+      sub.className = 'focus-sub';
+      sub.textContent = f.paused ? 'En pausa. Sigue cuando quieras.' : `${cat()} te acompaña. Sin distracciones.`;
+      btn(f.paused ? 'Seguir' : 'Pausa', pauseFocus);
+      btn('Terminar', stopFocus);
+      if (canFloat()) btn(floatWin ? 'Ventanita abierta ✓' : 'Flotar sobre otras apps', openFloat);
+      wrap.append(of, pet, tm, sub, acts);
+    } else {
+      const h = document.createElement('div');
+      h.className = 'task'; h.style.margin = '4px 0 0';
+      h.textContent = '¿Terminaste la tarea?';
+      btn('Sí, ¡listo!', e => { state.focusAsk = null; complete(task.id, e); }, 'primary');
+      btn('Otra ronda', () => startFocus(ask.mins, ask.taskId));
+      btn('Todavía no', () => { state.focusAsk = null; save(); render(); });
+      wrap.append(pet, h, of, acts);
+    }
+    body.append(wrap);
+  }
+  // ventanita flotante encima de otras apps (Chrome/Edge en compu)
+  async function openFloat() {
+    if (!canFloat()) { toast('Tu navegador no permite ventanas flotantes.', 'Funciona en Chrome o Edge en la compu.'); return; }
+    if (floatWin) { floatWin.focus(); return; }
+    try { floatWin = await documentPictureInPicture.requestWindow({ width: 240, height: 290 }); }
+    catch (e) { floatWin = null; toast('No se pudo abrir la ventanita.', ''); return; }
+    const w = floatWin, d = w.document;
+    const dark = state.settings.theme === 'dark' || (state.settings.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+    const st = d.createElement('style');
+    st.textContent = `body{margin:0;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:${dark ? '#1c1c1e' : '#ffffff'};color:${dark ? '#f5f5f7' : '#1d1d1f'};height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}
+img{image-rendering:pixelated;width:66px;animation:b 4s ease-in-out infinite;transform-origin:50% 100%}@keyframes b{50%{transform:scale(1.05,.96)}}
+.t{font-size:42px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}.s{opacity:.65;font-size:13px;padding:0 12px}
+button{font:inherit;border:0;border-radius:10px;padding:7px 14px;margin:2px;background:${dark ? '#2c2c2e' : '#f2f2f7'};color:inherit;cursor:pointer}
+@media (prefers-reduced-motion: reduce){img{animation:none}}`;
+    d.head.append(st);
+    d.title = 'Te acompaño';
+    const img = d.createElement('img'); img.src = calmPet(6).toDataURL();
+    const tm = d.createElement('div'); tm.className = 't';
+    const sub = d.createElement('div'); sub.className = 's';
+    const row = d.createElement('div');
+    const p = d.createElement('button'); p.onclick = () => pauseFocus();
+    const x = d.createElement('button'); x.textContent = 'Terminar'; x.onclick = () => stopFocus();
+    row.append(p, x);
+    d.body.append(img, tm, sub, row);
+    const upd = () => {
+      if (!state.focus) return;
+      tm.textContent = fmt(focusLeft());
+      p.textContent = state.focus.paused ? 'Seguir' : 'Pausa';
+      const task = tasks().find(z => z.id === state.focus.taskId);
+      sub.textContent = task ? task.text : '';
+      if (!state.focus.paused && Date.now() >= state.focus.end) finishFocus();
+    };
+    upd();
+    w.setInterval(upd, 1000);
+    w.addEventListener('pagehide', () => { floatWin = null; render(); });
+    render();
+  }
+  function closeFloat() {
+    const w = floatWin;
+    floatWin = null;
+    try { if (w) w.close(); } catch (e) {}
+  }
+  // el reloj de la app principal
+  setInterval(() => {
+    if (!state.focus) return;
+    const el = $('focusTimer');
+    if (el) el.textContent = fmt(focusLeft());
+    if (!state.focus.paused && Date.now() >= state.focus.end) finishFocus();
+  }, 1000);
+  window.miDia = { walkCat, finishFocus, newQuiz: () => { newQuiz(); save(); render(); }, checkin: () => { const t = tasks().find(x => !x.done); if (t) showCheckin(t); } }; // para probar desde la consola
 
   render();
   tick();
