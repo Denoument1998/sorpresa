@@ -245,6 +245,14 @@
       <button type="submit">Agregar</button>
     </form>
     <label class="form-opt"><input type="checkbox" id="newComplex"> Esta tarea tiene varios pasos</label>
+    <label class="form-opt">🔁 Se repite:
+      <select id="newRepeat" style="padding:6px 10px;font-size:15px">
+        <option value="">No</option>
+        <option value="daily">Todos los días</option>
+        <option value="weekdays">Lunes a viernes</option>
+        <option value="weekly">Cada semana, este día</option>
+      </select>
+    </label>
     <p class="hint">La hora es opcional. Si le pones una, te aviso 10 minutos antes y a la hora.</p>
   </div>
 
@@ -339,10 +347,14 @@
         <input id="floatOn" type="checkbox">
       </div>
       <div class="row">
+        <span>Avisos permitidos entre</span>
+        <span><input id="quietFrom" type="time" style="padding:6px 8px"> y <input id="quietTo" type="time" style="padding:6px 8px"></span>
+      </div>
+      <div class="row">
         <span id="notifStatus" style="color:var(--muted); font-size:15px"></span>
         <button class="link" id="enableNotif">Activar notificaciones</button>
       </div>
-      <p class="hint">Los avisos funcionan mientras esta página esté abierta, aunque esté minimizada. Solo salen entre 8:00 y 22:00.</p>
+      <p class="hint">Los avisos funcionan mientras esta página esté abierta, aunque esté minimizada. Los empujoncitos respetan el horario de avisos que elijas.</p>
     </details>
   </div>
 </main>
@@ -358,7 +370,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
 
   let state = {
-    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, sfx: true, petSound: true, ignoreSilent: false, floatOn: true, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
+    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, sfx: true, petSound: true, ignoreSilent: false, floatOn: true, quietFrom: '08:00', quietTo: '22:00', theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
     lastNudge: 0, lastPause: 0, dismissed: '', quiz: null, score: { ok: 0, total: 0 }, asked: [], goals: {}, lastGoalNag: 0
   };
   try {
@@ -821,6 +833,7 @@
   const tasks = () => (state.days[today] ||= []);
   const sorted = list => [...list].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
+    if (!!a.important !== !!b.important) return a.important ? -1 : 1;
     if (a.time && b.time) return toMin(a.time) - toMin(b.time);
     if (a.time) return -1;
     if (b.time) return 1;
@@ -836,6 +849,7 @@
 
   // ---------- render ----------
   function render() {
+    ensureRecurring();
     const d = new Date();
     $('hello').textContent = state.settings.name ? `Hola, ${state.settings.name}` : 'Hoy';
     const ds = d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -849,6 +863,8 @@
     const done = list.filter(t => t.done).length;
     $('countText').textContent = list.length ? `${done} de ${list.length} hechas` : 'Lista de hoy';
     $('bar').style.width = list.length ? `${(done / list.length) * 100}%` : '0';
+    const sk = streak();
+    if (sk) $('countText').textContent += `  ·  🔥 ${sk} día${sk > 1 ? 's' : ''} seguido${sk > 1 ? 's' : ''}`;
 
     // plan del día: cuántas cosas va a hacer hoy
     const goal = state.goals[today];
@@ -946,6 +962,12 @@
         const no = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Cancelar' });
         no.style.background = 'none'; no.style.color = 'var(--muted)';
         f.append(ti, hi, ok, no);
+        if (t.recurId) {
+          const sr = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Dejar de repetir' });
+          sr.style.background = 'none'; sr.style.color = 'var(--muted)';
+          sr.onclick = () => { state.recurring = (state.recurring || []).filter(r => r.id !== t.recurId); delete t.recurId; editingId = null; save(); render(); toast('Listo, ya no se repite.', ''); };
+          f.append(sr);
+        }
         f.onsubmit = e => {
           e.preventDefault();
           const nt = ti.value.trim();
@@ -953,6 +975,8 @@
           const nh = hi.value || null;
           if (nh !== t.time) { t.pre = false; t.at = false; t.checked = false; t.snoozeUntil = 0; }
           t.text = nt; t.time = nh; editingId = null;
+          const rt = (state.recurring || []).find(r => r.id === t.recurId);
+          if (rt) { rt.text = nt; rt.time = nh; }
           save(); render(); toast('Tarea actualizada.', '');
         };
         no.onclick = () => { editingId = null; render(); };
@@ -971,6 +995,7 @@
       s.className = 'text';
       s.textContent = t.text;
       if (!t.done) { s.title = 'Toca para editar'; s.onclick = () => { editingId = t.id; render(); }; }
+      if (t.recurId) s.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '🔁' }));
       const steps = t.steps || [];
       if (steps.length) {
         const bd = document.createElement('span');
@@ -992,7 +1017,13 @@
         sb.onclick = () => { openSteps.has(t.id) ? openSteps.delete(t.id) : openSteps.add(t.id); render(); focusStepInput(t.id); };
         li.append(sb);
       }
-      const del = document.createElement('button');
+      if (!t.done) {
+        const star = Object.assign(document.createElement('button'), { className: 'del', textContent: t.important ? '⭐' : '☆' });
+        star.style.opacity = t.important ? '1' : '.5';
+        star.setAttribute('aria-label', t.important ? 'Quitar de importantes' : 'Marcar como importante');
+        star.onclick = () => { t.important = !t.important; save(); render(); };
+        li.append(star);
+      }      const del = document.createElement('button');
       del.className = 'del';
       del.setAttribute('aria-label', 'Borrar');
       del.textContent = '✕';
@@ -1016,7 +1047,34 @@
     'Un pasito a la vez está bien. Te quiero. 🧡',
     'Respira. Vas a poder, y yo estoy de tu lado. 🧡',
     `${cat()} y yo creemos en ti. 🐾🧡`,
-  ];  const openSteps = new Set();
+  ];  // tareas que se repiten: se agregan solas el día que les toca
+  function ensureRecurring() {
+    const dow = new Date().getDay();
+    const added = ((state.recurAdded ||= {})[today] ||= []);
+    let changed = false;
+    for (const r of state.recurring || []) {
+      const ok = r.rule === 'daily' || (r.rule === 'weekdays' && dow >= 1 && dow <= 5) || (r.rule === 'weekly' && dow === r.dow);
+      if (!ok || added.includes(r.id)) continue;
+      tasks().push({ id: Date.now() + Math.random(), text: r.text, time: r.time, done: false, created: Date.now(), pre: false, at: false, steps: [], recurId: r.id });
+      added.push(r.id); changed = true;
+    }
+    if (changed) save();
+  }
+  // racha: días seguidos con todo terminado (hoy cuenta si ya terminaste)
+  function streak() {
+    const full = k => { const l = state.days[k]; return l && l.length && l.every(x => x.done); };
+    const d = new Date();
+    if (!full(dayKey(d))) d.setDate(d.getDate() - 1);
+    let n = 0;
+    while (full(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+  // horario en que se permiten empujoncitos y pausas
+  function awakeNow() {
+    const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+    const a = toMin(state.settings.quietFrom || '08:00'), b = toMin(state.settings.quietTo || '22:00');
+    return a <= b ? (m >= a && m < b) : (m >= a || m < b);
+  }  const openSteps = new Set();
   let editingId = null;
   const currentStep = t => (t.steps || []).find(s => !s.done);
   const focusStepInput = id => setTimeout(() => document.querySelector(`[data-step-input="${id}"]`)?.focus(), 0);
@@ -1115,7 +1173,16 @@
   ];
   // [motivo, respuestas, acción]
   const reasons = [
-    ['No sé por dónde empezar', [
+    ['Me olvidé', [
+      '¡Pasa! Lo importante es que ya te acordaste.',
+      'No pasa nada, todavía estás a tiempo.',
+      'Tranqui, para eso estamos. Vamos con calma.',
+    ], 'forgot'],
+    ['Estoy ocupado, quiero moverla', [
+      'Perfecto, la movemos sin culpa.',
+      'Bien pensado, mejor hacerla con calma.',
+      'Claro, a veces el día pide otro orden.',
+    ], 'move'],    ['No sé por dónde empezar', [
       'Empieza por lo más chiquito que se te ocurra. Solo eso. Tú puedes. 🐾',
       'No tienes que verlo todo claro. Da el primer pasito y el resto se va acomodando.',
       `Elige la parte más fácil y arranca por ahí. ${cat()} te acompaña. 🐾`,
@@ -1206,7 +1273,24 @@
         sp.onclick = () => { close(); openSteps.add(t.id); render(); focusStepInput(t.id); document.querySelector(`[data-step-input="${t.id}"]`)?.scrollIntoView({ block: 'center' }); };
         acts.append(sp);
       }
-      if (action === 'snooze' || action === 'split') {
+      if (action === 'forgot') {
+        const fb = Object.assign(document.createElement('button'), { className: 'soft', textContent: 'Recuérdamelo en 10 min' });
+        fb.onclick = () => { t.remindAt = Date.now() + 10 * 60000; save(); close(); toast('Listo.', 'Te lo recuerdo en 10 minutos. 🐾'); };
+        acts.append(fb);
+      }
+      if (action === 'move') {
+        const later = m => { const d = new Date(Date.now() + m * 60000); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+        const reset = () => { t.pre = false; t.at = false; t.checked = false; t.snoozeUntil = 0; };
+        const mv = (label, fn) => { const b = Object.assign(document.createElement('button'), { className: 'soft', textContent: label }); b.onclick = () => { fn(); save(); close(); render(); }; acts.append(b); };
+        mv('En 30 min', () => { t.time = later(30); reset(); toast('Movida.', `Ahora es a las ${t.time}. 🐾`); });
+        mv('En 1 hora', () => { t.time = later(60); reset(); toast('Movida.', `Ahora es a las ${t.time}. 🐾`); });
+        mv('Mañana', () => {
+          const d = new Date(); d.setDate(d.getDate() + 1);
+          (state.days[dayKey(d)] ||= []).push({ ...t, id: Date.now() + Math.random(), pre: false, at: false, checked: false, snoozeUntil: 0, created: 0 });
+          state.days[today] = tasks().filter(x => x !== t);
+          toast('Listo, pasa a mañana.', 'Sin culpa. 🐾');
+        });
+      }      if (action === 'snooze' || action === 'split') {
         const sn = Object.assign(document.createElement('button'), { className: 'soft', textContent: 'Pregúntame en 20 min' });
         sn.onclick = () => { t.checked = false; t.snoozeUntil = Date.now() + 20 * 60000; save(); close(); toast('Listo.', `Te pregunto de nuevo en 20 minutos. 🐾`); };
         acts.append(sn);
@@ -1272,6 +1356,14 @@
     if (!text) return;
     const id = Date.now() + Math.random();
     tasks().push({ id, text, time: $('newTime').value || null, done: false, created: Date.now(), pre: false, at: false, steps: [] });
+    const rep = $('newRepeat').value;
+    if (rep) {
+      const rid = 'r' + Date.now();
+      (state.recurring ||= []).push({ id: rid, text, time: tasks().at(-1).time, rule: rep, dow: new Date().getDay() });
+      tasks().at(-1).recurId = rid;
+      ((state.recurAdded ||= {})[today] ||= []).push(rid);
+      $('newRepeat').value = '';
+    }
     $('newText').value = ''; $('newTime').value = '';
     if ($('newComplex').checked) {
       $('newComplex').checked = false;
@@ -1285,7 +1377,7 @@
   $('clearDone').onclick = () => { state.days[today] = tasks().filter(t => !t.done); save(); render(); };
   $('bringOver').onclick = () => {
     const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
-    for (const t of state.days[prev].filter(t => !t.done)) {
+    for (const t of state.days[prev].filter(t => !t.done && !t.recurId)) {
       tasks().push(Object.assign({}, t, { id: Date.now() + Math.random(), pre: false, at: false, created: Date.now(), steps: (t.steps || []).map(s => ({ ...s, id: Date.now() + Math.random() })) }));
       t.done = true;
     }
@@ -1336,6 +1428,10 @@
   $('petSoundOn').onchange = e => { state.settings.petSound = e.target.checked; save(); if (e.target.checked) petSound(); };
   $('floatOn').checked = state.settings.floatOn;
   $('floatOn').onchange = e => { state.settings.floatOn = e.target.checked; save(); };
+  $('quietFrom').value = state.settings.quietFrom;
+  $('quietTo').value = state.settings.quietTo;
+  $('quietFrom').onchange = e => { state.settings.quietFrom = e.target.value || '08:00'; save(); };
+  $('quietTo').onchange = e => { state.settings.quietTo = e.target.value || '22:00'; save(); };
   if (!('documentPictureInPicture' in window)) $('floatOn').closest('.row').hidden = true;  $('ignoreSilent').checked = state.settings.ignoreSilent;
   $('ignoreSilent').onchange = e => { state.settings.ignoreSilent = e.target.checked; save(); applyAudioSession(); sfx('sparkle'); };
   $('enableNotif').onclick = async () => {
@@ -1471,7 +1567,7 @@
     const goal = state.goals[today];
     if (!state.settings.plan || !goal) return false;
     const n = tasks().length, h = new Date().getHours();
-    if (n >= goal || h < 8 || h >= 22 || Date.now() - state.lastGoalNag < minGapMin * 60000) return false;
+    if (n >= goal || !awakeNow() || Date.now() - state.lastGoalNag < minGapMin * 60000) return false;
     state.lastGoalNag = Date.now(); save();
     const miss = goal - n;
     notify('Oye 📝', miss === 1 ? `No te olvides de anotar tu ${ordinal(n + 1)} tarea.` : `Te faltan anotar ${miss} tareas de las ${goal} que pensabas hacer hoy.`);
@@ -1482,7 +1578,7 @@
     const d = new Date();
     if (dayKey(d) !== today) { today = dayKey(d); render(); }
     const m = d.getHours() * 60 + d.getMinutes();
-    const awake = d.getHours() >= 8 && d.getHours() < 22;
+    const awake = awakeNow();
     let changed = false;
 
     for (const t of tasks()) {
@@ -1517,6 +1613,7 @@
       state.lastPause = Date.now(); changed = true;
     }
 
+    for (const x of tasks()) if (x.remindAt && !x.done && Date.now() >= x.remindAt) { delete x.remindAt; changed = true; notify('⏰ Recordatorio', x.text); }
     if (!focusing()) { goalNag(30); checkLate(); }
     if (changed) save();
   }
