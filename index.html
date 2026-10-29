@@ -1258,6 +1258,10 @@
   };
 
   // ---------- recordatorios ----------
+  let swReg = null;
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});
+  }
   let audioCtx;
   function chime() {
     if (!state.settings.sound) return;
@@ -1283,7 +1287,12 @@
     walkCat();
     toast(title, body);
     if ('Notification' in window && Notification.permission === 'granted') {
-      try { const n = new Notification(title, { body }); n.onclick = () => { window.focus(); n.close(); }; } catch (e) {}
+      // el iPhone (app instalada) y Android solo aceptan notificaciones a través del service worker
+      if (swReg && swReg.showNotification) {
+        swReg.showNotification(title, { body, icon: 'icon-192.png', badge: 'icon-192.png' }).catch(() => {});
+      } else {
+        try { const n = new Notification(title, { body, icon: 'icon-192.png' }); n.onclick = () => { window.focus(); n.close(); }; } catch (e) {}
+      }
     }
     if (document.hidden) {
       clearInterval(titleTimer);
