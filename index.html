@@ -175,7 +175,9 @@
   .week-stats div { background: var(--bg); border-radius: 12px; padding: 10px 12px; }
   .week-stats b { display: block; font-size: 20px; }
   .week-stats span { color: var(--muted); font-size: 13px; }
-  .week-msg { margin: 12px 0 0; color: var(--muted); font-size: 15px; }  .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .week-msg { margin: 12px 0 0; color: var(--muted); font-size: 15px; }  .drag { background: none; color: var(--muted); padding: 2px 2px; cursor: grab; touch-action: none; font-size: 17px; opacity: .55; line-height: 1; }
+  .drag:active { cursor: grabbing; }
+  li.dragging { background: var(--card); box-shadow: 0 8px 24px rgba(0,0,0,.18); border-radius: 12px; position: relative; z-index: 2; padding-left: 6px; padding-right: 6px; }  .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
 
   .checkin-overlay {
     position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px;
@@ -851,6 +853,8 @@
   const tasks = () => (state.days[today] ||= []);
   const sorted = list => [...list].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
+    const ao = a.order ?? Infinity, bo = b.order ?? Infinity;
+    if (ao !== bo) return ao - bo;
     if (!!a.important !== !!b.important) return a.important ? -1 : 1;
     if (a.time && b.time) return toMin(a.time) - toMin(b.time);
     if (a.time) return -1;
@@ -1004,6 +1008,13 @@
         continue;
       }
       if (t.done) li.className = 'done';
+      li.dataset.id = t.id;
+      if (!t.done && list.filter(x => !x.done).length > 1) {
+        const h = Object.assign(document.createElement('button'), { className: 'drag', textContent: '⠿', title: 'Arrastra para ordenar' });
+        h.setAttribute('aria-label', 'Arrastrar para ordenar');
+        h.onpointerdown = e => startDrag(e, li, h);
+        li.append(h);
+      }
       const c = document.createElement('button');
       c.className = 'check';
       c.setAttribute('aria-label', t.done ? 'Marcar como pendiente' : 'Marcar como hecha');
@@ -1039,7 +1050,7 @@
         const star = Object.assign(document.createElement('button'), { className: 'del', textContent: t.important ? '⭐' : '☆' });
         star.style.opacity = t.important ? '1' : '.5';
         star.setAttribute('aria-label', t.important ? 'Quitar de importantes' : 'Marcar como importante');
-        star.onclick = () => { t.important = !t.important; save(); render(); };
+        star.onclick = () => { t.important = !t.important; tasks().forEach(x => delete x.order); save(); render(); };
         li.append(star);
       }      const del = document.createElement('button');
       del.className = 'del';
@@ -1376,6 +1387,32 @@
       : totalDone >= 20 ? `¡Semanón! Tu mejor día fue ${bestName}, con ${best.done} tareas. Lo estás haciendo increíble. ✨`
       : `Tu mejor día fue ${bestName}, con ${best.done} ${best.done === 1 ? 'tarea' : 'tareas'}. Cada paso cuenta. 💪`;
     box.replaceChildren(bars, stats, msg);
+  }
+  // ---------- arrastrar para ordenar (mouse y dedo) ----------
+  function startDrag(e, li, h) {
+    e.preventDefault();
+    const ul = li.parentElement;
+    li.classList.add('dragging');
+    let ended = false;
+    const move = ev => {
+      const others = [...ul.children].filter(x => x !== li && !x.classList.contains('done'));
+      const y = ev.clientY;
+      const target = others.find(o => { const r = o.getBoundingClientRect(); return y < r.top + r.height / 2; });
+      if (target) { if (li.nextElementSibling !== target) ul.insertBefore(li, target); }
+      else { const last = others.at(-1); if (last && last.nextElementSibling !== li) last.after(li); }
+    };
+    const up = () => {
+      if (ended) return;
+      ended = true;
+      window.removeEventListener('pointermove', move);
+      ['pointerup', 'pointercancel', 'mouseup', 'touchend'].forEach(ev => window.removeEventListener(ev, up));
+      li.classList.remove('dragging');
+      const ids = [...ul.children].filter(x => !x.classList.contains('done')).map(x => x.dataset.id);
+      ids.forEach((id, i) => { const tk = tasks().find(x => String(x.id) === id); if (tk) tk.order = i; });
+      save(); render();
+    };
+    window.addEventListener('pointermove', move);
+    ['pointerup', 'pointercancel', 'mouseup', 'touchend'].forEach(ev => window.addEventListener(ev, up));
   }
   function renderLeftover() {
     const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
