@@ -89,8 +89,24 @@
     background: transparent; padding: 0; display: grid; place-items: center; transition: background .2s, border-color .2s;
   }
   .check svg { width: 13px; height: 13px; opacity: 0; transition: opacity .2s; }
-  li.done .check { background: var(--accent); border-color: var(--accent); }
-  li.done .check svg { opacity: 1; }
+  li.done > .check, .step.done .check { background: var(--accent); border-color: var(--accent); }
+  li.done > .check svg, .step.done .check svg { opacity: 1; }
+  li { flex-wrap: wrap; }
+  .steps { flex-basis: 100%; padding-left: 36px; }
+  .step { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 15px; }
+  .step .check { width: 20px; height: 20px; flex: 0 0 20px; }
+  .step .check svg { width: 11px; height: 11px; }
+  .step.done .stext { color: var(--muted); text-decoration: line-through; }
+  .step .stext { flex: 1; word-break: break-word; }
+  .more-steps { color: var(--muted); font-size: 14px; padding: 3px 0 2px 30px; }
+  .step-add { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
+  .step-add input { flex: 1 1 160px; padding: 8px 10px; font-size: 15px; }
+  .step-add button { font-size: 15px; padding: 8px 12px; background: var(--ink); color: var(--card); font-weight: 600; }
+  .step-add select { font-size: 15px; padding: 8px 10px; flex: 1 1 100%; }
+  .steps-btn { background: none; color: var(--accent); font-size: 14px; padding: 2px 4px; }
+  .badge { font-size: 13px; color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .now .of { color: var(--muted); font-size: 15px; margin-bottom: 2px; }
+  .form-opt { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; margin-top: 10px; cursor: pointer; }
   li.done .text { color: var(--muted); }
   .text { flex: 1; word-break: break-word; transition: color .2s; }
   .time { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -189,6 +205,7 @@
       <input type="time" id="newTime" title="Hora (opcional)">
       <button type="submit">Agregar</button>
     </form>
+    <label class="form-opt"><input type="checkbox" id="newComplex"> Esta tarea tiene varios pasos</label>
     <p class="hint">La hora es opcional. Si le pones una, te aviso 10 minutos antes y a la hora.</p>
   </div>
 
@@ -772,13 +789,20 @@
         w.textContent = next.time;
         body.append(w);
       }
+      const step = currentStep(next);
+      if (step) {
+        const of = document.createElement('div');
+        of.className = 'of';
+        of.textContent = `${next.text} · paso ${next.steps.indexOf(step) + 1} de ${next.steps.length}`;
+        body.append(of);
+      }
       const t = document.createElement('div');
       t.className = 'task';
-      t.textContent = next.text;
+      t.textContent = step ? step.text : next.text;
       const b = document.createElement('button');
       b.className = 'primary';
-      b.textContent = 'Listo';
-      b.onclick = e => complete(next.id, e);
+      b.textContent = step ? 'Listo, siguiente paso' : 'Listo';
+      b.onclick = e => step ? completeStep(next.id, step.id, e) : complete(next.id, e);
       body.append(t, b);
     } else if (list.length) {
       const wrap = document.createElement('div');
@@ -826,6 +850,13 @@
       const s = document.createElement('span');
       s.className = 'text';
       s.textContent = t.text;
+      const steps = t.steps || [];
+      if (steps.length) {
+        const bd = document.createElement('span');
+        bd.className = 'badge';
+        bd.textContent = `${steps.filter(x => x.done).length}/${steps.length}`;
+        s.append(bd);
+      }
       li.append(c, s);
       if (t.time) {
         const tm = document.createElement('span');
@@ -833,18 +864,114 @@
         tm.textContent = t.time;
         li.append(tm);
       }
+      if (!t.done) {
+        const sb = document.createElement('button');
+        sb.className = 'steps-btn';
+        sb.textContent = openSteps.has(t.id) ? 'Cerrar' : steps.length ? 'Editar pasos' : '+ pasos';
+        sb.onclick = () => { openSteps.has(t.id) ? openSteps.delete(t.id) : openSteps.add(t.id); render(); focusStepInput(t.id); };
+        li.append(sb);
+      }
       const del = document.createElement('button');
       del.className = 'del';
       del.setAttribute('aria-label', 'Borrar');
       del.textContent = '✕';
       del.onclick = () => { state.days[today] = tasks().filter(x => x.id !== t.id); save(); render(); };
       li.append(del);
+      if (steps.length || openSteps.has(t.id)) li.append(renderSteps(t));
       ul.append(li);
     }
 
     renderLeftover();
     renderNotifStatus();
     renderQuiz();
+  }
+
+  // ---------- tareas con pasos ----------
+  const openSteps = new Set();
+  const currentStep = t => (t.steps || []).find(s => !s.done);
+  const focusStepInput = id => setTimeout(() => document.querySelector(`[data-step-input="${id}"]`)?.focus(), 0);
+
+  function renderSteps(t) {
+    const box = document.createElement('div');
+    box.className = 'steps';
+    const steps = t.steps || [];
+    const editing = openSteps.has(t.id);
+    const cur = currentStep(t);
+    let hidden = 0;
+    for (const st of steps) {
+      // los pasos se van desbloqueando: se ven los hechos y el que toca; los demás esperan
+      if (!editing && !st.done && st !== cur) { hidden++; continue; }
+      const row = document.createElement('div');
+      row.className = 'step' + (st.done ? ' done' : '');
+      const c = document.createElement('button');
+      c.className = 'check';
+      c.innerHTML = checkSvg;
+      c.setAttribute('aria-label', st.done ? 'Desmarcar paso' : 'Marcar paso');
+      c.onclick = e => st.done ? (st.done = false, t.done = false, save(), render()) : completeStep(t.id, st.id, e);
+      const tx = document.createElement('span');
+      tx.className = 'stext';
+      tx.textContent = st.text;
+      row.append(c, tx);
+      if (editing) {
+        const d = Object.assign(document.createElement('button'), { className: 'del', textContent: '✕' });
+        d.setAttribute('aria-label', 'Borrar paso');
+        d.onclick = () => { t.steps = steps.filter(x => x !== st); save(); render(); };
+        row.append(d);
+      }
+      box.append(row);
+    }
+    if (hidden) {
+      const m = document.createElement('div');
+      m.className = 'more-steps';
+      m.textContent = `🔒 ${hidden} paso${hidden > 1 ? 's' : ''} más, se desbloquea${hidden > 1 ? 'n' : ''} al terminar este`;
+      box.append(m);
+    }
+    if (editing) {
+      const add = document.createElement('form');
+      add.className = 'step-add';
+      const inp = Object.assign(document.createElement('input'), { type: 'text', placeholder: steps.length ? 'Siguiente paso' : 'Primer paso (ej. llevar los audífonos)' });
+      inp.dataset.stepInput = t.id;
+      const btn = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Agregar' });
+      add.append(inp, btn);
+      add.onsubmit = e => {
+        e.preventDefault();
+        const text = inp.value.trim();
+        if (!text) return;
+        (t.steps ||= []).push({ id: Date.now() + Math.random(), text, done: false });
+        t.done = false;
+        save(); render(); focusStepInput(t.id);
+      };
+      // meter una tarea suelta dentro de esta
+      const loose = tasks().filter(x => x !== t && !x.done && !(x.steps || []).length);
+      if (loose.length) {
+        const sel = document.createElement('select');
+        sel.append(new Option('…o mete aquí una tarea suelta', ''));
+        for (const x of loose) sel.append(new Option(x.text, x.id));
+        sel.onchange = () => {
+          const x = loose.find(l => String(l.id) === sel.value);
+          if (!x) return;
+          (t.steps ||= []).push({ id: Date.now() + Math.random(), text: x.text, done: false });
+          state.days[today] = tasks().filter(l => l !== x);
+          save(); render(); toast('Listo, la metí como paso.', `"${x.text}" ahora es parte de "${t.text}".`);
+        };
+        add.append(sel);
+      }
+      box.append(add);
+    }
+    return box;
+  }
+
+  function completeStep(taskId, stepId, ev) {
+    const t = tasks().find(x => x.id === taskId);
+    const st = t && (t.steps || []).find(s => s.id === stepId);
+    if (!st) return;
+    st.done = true;
+    const nxt = currentStep(t);
+    if (!nxt) { complete(taskId, ev); return; }
+    save();
+    celebrate(ev);
+    toast('Paso listo ✓', `Ahora sigue: ${nxt.text}`);
+    render();
   }
 
   function renderLeftover() {
@@ -868,6 +995,8 @@
     const t = tasks().find(x => x.id === id);
     if (!t) return;
     t.done = true;
+    (t.steps || []).forEach(s => { s.done = true; });
+    openSteps.delete(id);
     save();
     celebrate(ev);
     const allDone = tasks().every(x => x.done);
@@ -884,15 +1013,23 @@
     e.preventDefault();
     const text = $('newText').value.trim();
     if (!text) return;
-    tasks().push({ id: Date.now() + Math.random(), text, time: $('newTime').value || null, done: false, created: Date.now(), pre: false, at: false });
+    const id = Date.now() + Math.random();
+    tasks().push({ id, text, time: $('newTime').value || null, done: false, created: Date.now(), pre: false, at: false, steps: [] });
     $('newText').value = ''; $('newTime').value = '';
-    save(); render(); $('newText').focus();
+    if ($('newComplex').checked) {
+      $('newComplex').checked = false;
+      openSteps.add(id);
+      save(); render(); focusStepInput(id);
+      toast('Tarea con pasos.', 'Anota los pasos en orden; se irán desbloqueando uno por uno.');
+    } else {
+      save(); render(); $('newText').focus();
+    }
   };
   $('clearDone').onclick = () => { state.days[today] = tasks().filter(t => !t.done); save(); render(); };
   $('bringOver').onclick = () => {
     const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
     for (const t of state.days[prev].filter(t => !t.done)) {
-      tasks().push(Object.assign({}, t, { id: Date.now() + Math.random(), pre: false, at: false, created: Date.now() }));
+      tasks().push(Object.assign({}, t, { id: Date.now() + Math.random(), pre: false, at: false, created: Date.now(), steps: (t.steps || []).map(s => ({ ...s, id: Date.now() + Math.random() })) }));
       t.done = true;
     }
     save(); render(); toast('Listo, las pasé a hoy.', 'Una a la vez.');
