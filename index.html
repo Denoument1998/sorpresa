@@ -313,6 +313,9 @@
       <div class="row">
         <label for="petSoundOn">Sonido de la mascota cuando aparece</label>
         <input id="petSoundOn" type="checkbox">
+      </div>      <div class="row">
+        <label for="ignoreSilent">Sonar aunque el iPhone est&eacute; en silencio</label>
+        <input id="ignoreSilent" type="checkbox">
       </div>
       <div class="row">
         <span id="notifStatus" style="color:var(--muted); font-size:15px"></span>
@@ -334,7 +337,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
 
   let state = {
-    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, sfx: true, petSound: true, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
+    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, sfx: true, petSound: true, ignoreSilent: false, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
     lastNudge: 0, lastPause: 0, dismissed: '', quiz: null, score: { ok: 0, total: 0 }, asked: [], goals: {}, lastGoalNag: 0
   };
   try {
@@ -1268,6 +1271,8 @@
   $('sfxOn').onchange = e => { state.settings.sfx = e.target.checked; save(); if (e.target.checked) sfx('sparkle'); };
   $('petSoundOn').checked = state.settings.petSound;
   $('petSoundOn').onchange = e => { state.settings.petSound = e.target.checked; save(); if (e.target.checked) petSound(); };
+  $('ignoreSilent').checked = state.settings.ignoreSilent;
+  $('ignoreSilent').onchange = e => { state.settings.ignoreSilent = e.target.checked; save(); applyAudioSession(); sfx('sparkle'); };
   $('enableNotif').onclick = async () => {
     try { await Notification.requestPermission(); } catch (e) {}
     renderNotifStatus();
@@ -1336,6 +1341,24 @@
       if (type === 'ave') [0, 0.1, 0.2, 0.42].forEach(t => tone(2400, t, 0.08, { vol: 0.06, f1: 3600 }));
     } catch (e) {}
   }
+  // iPhone/Safari: el audio solo se desbloquea dentro de un toque; lo intentamos en cada toque
+  function applyAudioSession() {
+    try { if (navigator.audioSession) navigator.audioSession.type = state.settings.ignoreSilent ? 'playback' : 'auto'; } catch (e) {}
+  }
+  function unlockAudio() {
+    try {
+      applyAudioSession();
+      const a = ac();
+      if (!unlockAudio.done) {
+        const b = a.createBuffer(1, 1, 22050), s = a.createBufferSource();
+        s.buffer = b; s.connect(a.destination); s.start(0);
+        unlockAudio.done = true;
+      }
+      if (a.state !== 'running') a.resume();
+    } catch (e) {}
+  }
+  ['pointerdown', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); });
 
 
   let titleTimer;
