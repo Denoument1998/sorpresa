@@ -48,7 +48,7 @@
   .avatar { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; object-position: 50% 15%; flex: 0 0 46px; }
   h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
   .date { color: var(--muted); font-size: 15px; margin: 2px 0 0; }
-  .quote { color: var(--muted); font-size: 15px; margin: 14px 0 28px; font-style: italic; }
+  .quote { color: var(--muted); font-size: 15px; margin: 14px 0 6px; font-style: italic; }
 
   .card { background: var(--card); border-radius: 18px; padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
   .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 4px 8px; font-weight: 600; }
@@ -116,6 +116,18 @@
   #toast.show { transform: translate(-50%, 0); }
   #toast small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
   .burst { position: fixed; pointer-events: none; font-size: 18px; animation: fly .9s ease-out forwards; z-index: 9; }
+
+  .pix { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  .walker { position: fixed; bottom: 16px; left: 0; z-index: 20; pointer-events: none; }
+  .walker-heart { position: fixed; z-index: 21; pointer-events: none; font-size: 18px; animation: fly 1.2s ease-out forwards; }
+  .alldone .cats { margin: 6px auto 14px; animation: bob 2.2s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-5px); } }
+  .quiz-row { display: flex; gap: 14px; align-items: center; }
+  .quiz-row .pix { flex: 0 0 auto; }
+  .fact-day { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  .plan-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .plan-btns button { background: var(--bg); color: var(--ink); min-width: 46px; font-weight: 600; }
+  .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
   @keyframes fly { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } }
 </style>
 </head>
@@ -129,6 +141,12 @@
     </div>
   </header>
   <p class="quote" id="quote"></p>
+  <p class="fact-day" id="factDay"></p>
+
+  <div class="card" id="planCard" hidden>
+    <strong>¿Cuántas cosas vas a hacer hoy?</strong>
+    <div class="plan-btns" id="planBtns"></div>
+  </div>
 
   <div class="card" id="leftover" hidden>
     <div class="banner">
@@ -180,6 +198,7 @@
       <button class="link" id="clearDone">Quitar hechas</button>
     </div>
     <div class="progress"><div id="bar"></div></div>
+    <div class="goal-line" id="goalLine"></div>
     <ul id="list"></ul>
   </div>
 
@@ -212,6 +231,22 @@
           <option value="90">Cada hora y media</option>
           <option value="120">Cada 2 horas</option>
         </select>
+      </div>
+      <div class="row">
+        <span>Tu foto</span>
+        <span>
+          <button class="link" id="photoBtn">Cambiar foto</button>
+          <button class="quiet" id="photoReset">Usar la de la Gordita</button>
+          <input type="file" id="photoInput" accept="image/*" hidden>
+        </span>
+      </div>
+      <div class="row">
+        <label for="petOn">La Gordita pasea por la pantalla en los recordatorios</label>
+        <input id="petOn" type="checkbox">
+      </div>
+      <div class="row">
+        <label for="planOn">Preguntarme cuántas cosas haré hoy</label>
+        <input id="planOn" type="checkbox">
       </div>
       <div class="row">
         <label for="theme">Apariencia</label>
@@ -253,8 +288,8 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
 
   let state = {
-    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, theme: 'auto', quiz: true },
-    lastNudge: 0, lastPause: 0, dismissed: '', quiz: null, score: { ok: 0, total: 0 }, asked: []
+    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
+    lastNudge: 0, lastPause: 0, dismissed: '', quiz: null, score: { ok: 0, total: 0 }, asked: [], goals: {}, lastGoalNag: 0
   };
   try {
     const saved = JSON.parse(localStorage.getItem(KEY));
@@ -272,8 +307,148 @@
     ['Lo estás haciendo súper.', 'Te quiero mucho, no lo olvides. 🧡'],
     ['Pasaba a recordarte algo:', 'te quiero muchísimo. 🧡'],
     ['Me encanta verte avanzar.', 'Estoy muy orgullosa de ti. 🧡'],
+    ['Eres el mejor.', 'Que no se te olvide. 🧡'],
+    ['Te estás esforzando mucho.', 'Y se nota. Te quiero. 🧡'],
+    ['Lo hiciste súper bien.', 'Estoy orgullosa de ti. 🧡'],
+    ['¡Qué chévere!', 'Sigue así, lo estás haciendo increíble. 🧡'],
+    ['Eres increíble, ¿sabías?', 'Te quiero muchísimo. 🧡'],
+    ['Un abrazo grande por esto.', 'Estoy muy orgullosa de ti. 🧡'],
   ];
   const sometimesLove = (list, chance) => Math.random() < chance ? pick(love) : pick(list);
+
+  const ordinal = n => ['primera', 'segunda', 'tercera', 'cuarta', 'quinta', 'sexta', 'séptima', 'octava', 'novena', 'décima'].at(n - 1) || `número ${n}`;
+
+  // ---------- pixel art ----------
+  const PAL = {
+    k: '#3a3a3c', g: '#a1a1a6', d: '#6e6e73', w: '#f2f2f7', p: '#ff9fb2', e: '#1d1d1f',
+    o: '#55555a', b: '#141416', y: '#ffd60a', r: '#ff4d6d', q: '#8e8e93',
+  };
+  function sprite(layers, w, h, scale) {
+    const c = document.createElement('canvas');
+    c.width = w * scale; c.height = h * scale;
+    c.style.width = c.width + 'px'; c.style.height = c.height + 'px';
+    c.className = 'pix';
+    const ctx = c.getContext('2d');
+    for (const [rows, ox, oy] of layers) {
+      rows.forEach((row, y) => [...row].forEach((ch, x) => {
+        if (PAL[ch]) { ctx.fillStyle = PAL[ch]; ctx.fillRect((ox + x) * scale, (oy + y) * scale, scale, scale); }
+      }));
+    }
+    return c;
+  }
+  // la Gordita caminando (atigrada gris con blanco), dos cuadros
+  const GORDITA_TOP = [
+    'k..........k.....k',
+    'kk.........kgkkkgk',
+    '.k.........kgggggk',
+    '.k.........kgegegk',
+    '.kkkkkkkkkkkgwpwgk',
+    '..kdgdgdgdgkkwwwk.',
+    '..kggggggggwwwwk..',
+    '..kgggggwwwwwwwk..',
+    '..kkkkkkkkkkkkkk..',
+  ];
+  const GORDITA_A = [...GORDITA_TOP, '..kw.kw...kw.kw...', '..kk.kk...kk.kk...'];
+  const GORDITA_B = [...GORDITA_TOP, '...kwkw....kwkw...', '...kkkk....kkkk...'];
+  // gatito negro sentado
+  const BLACK_CAT = [
+    'o.........o',
+    'oo.......oo',
+    'obooooooobo',
+    'obbbbbbbbbo',
+    'obbybbbybbo',
+    'obbbbpbbbbo',
+    '.obbbbbbbo.',
+    '.obbbbbbbo.',
+    'obbbbbbbbbo',
+    'obbbbbbbbbo',
+    'obbobbbobbo',
+    '.ooo...ooo.',
+  ];
+  const HEART = ['.rr.rr.', 'rrrrrrr', 'rrrrrrr', '.rrrrr.', '..rrr..', '...r...'];
+  const SMALL_HEART = ['.r.r.', 'rrrrr', '.rrr.', '..r..'];
+  // tuxedo feliz y pensando
+  const TUX_HAPPY = [
+    'o.........o',
+    'oo.......oo',
+    'obooooooobo',
+    'obbbbbbbbbo',
+    'obyybbbyybo',
+    'obpbwpwbpbo',
+    '.obwwwwwbo.',
+    '.obwwwwwbo.',
+    'obbwwwwwbbo',
+    'obbwwwwwbbo',
+    'obwobbbowbo',
+    '.ooo...ooo.',
+  ];
+  const TUX_THINK = [
+    'o.........o',
+    'oo.......oo',
+    'obooooooobo',
+    'obbbbybbbyo',
+    'obbbbbbbbbo',
+    'obbbwpwbbbo',
+    '.obwwwwwbo.',
+    '.obwwwwwbo.',
+    'obbwwwwwbbo',
+    'obbwwwwwbbo',
+    'obwobbbowbo',
+    '.ooo...ooo.',
+  ];
+  const QMARK = ['.qqq.', 'q...q', '....q', '...q.', '..q..', '.....', '..q..'];
+
+  const threeBlackCats = () => sprite([
+    [BLACK_CAT, 0, 7], [BLACK_CAT, 14, 7], [BLACK_CAT, 28, 7],
+    [HEART, 16, 0], [SMALL_HEART, 3, 2], [SMALL_HEART, 31, 2],
+  ], 39, 19, 5);
+  const tuxCat = happy => happy
+    ? sprite([[TUX_HAPPY, 0, 3], [SMALL_HEART, 13, 0]], 18, 15, 4)
+    : sprite([[TUX_THINK, 0, 3], [QMARK, 13, 0]], 18, 15, 4);
+
+  // la Gordita entra caminando, juega un ratito y se va
+  let walkQueued = false, walking = false;
+  function walkCat() {
+    if (!state.settings.pet) return;
+    if (document.hidden) { walkQueued = true; return; }
+    if (walking) return;
+    walking = true;
+    const scale = 5, fw = 18 * scale;
+    const frames = [GORDITA_A, GORDITA_B].map(f => { const c = sprite([[f, 0, 0]], 18, 11, scale); c.classList.add('walker'); return c; });
+    const holder = document.createElement('div');
+    document.body.append(holder);
+    const mid = innerWidth / 2 - fw / 2, end = innerWidth + 20, speed = 0.14; // px por ms
+    const t1 = (mid + fw) / speed, t2 = t1 + 1600, t3 = t2 + (end - mid) / speed;
+    let start = null, shown = null, hearts = false;
+    const step = ts => {
+      start ??= ts;
+      const t = ts - start;
+      let x, y = 0, moving = true;
+      if (t < t1) x = -fw + t * speed;
+      else if (t < t2) {
+        x = mid; moving = false;
+        y = Math.abs(Math.sin((t - t1) / 180)) * -14; // saltitos
+        if (!hearts) {
+          hearts = true;
+          for (let i = 0; i < 4; i++) setTimeout(() => {
+            const h = document.createElement('span');
+            h.className = 'walker-heart'; h.textContent = i % 2 ? '🧡' : '🐾';
+            h.style.left = (mid + fw / 2) + 'px'; h.style.bottom = (16 + 11 * scale) + 'px';
+            h.style.setProperty('--dx', (Math.random() * 80 - 40) + 'px');
+            h.style.setProperty('--dy', (-40 - Math.random() * 50) + 'px');
+            h.style.setProperty('--r', '0deg');
+            document.body.append(h); setTimeout(() => h.remove(), 1200);
+          }, i * 250);
+        }
+      } else if (t < t3) x = mid + (t - t2) * speed;
+      else { holder.remove(); walking = false; return; }
+      const f = moving ? frames.at(Math.floor(t / 140) % 2) : frames.at(0);
+      if (shown !== f) { holder.replaceChildren(f); shown = f; }
+      f.style.transform = `translate(${x}px, ${y}px)`;
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
 
   // ---------- banco de preguntas: [pregunta, correcta, [incorrectas], dato] ----------
   const QUIZ = [
@@ -443,7 +618,12 @@
     const close = Object.assign(document.createElement('button'), { className: 'quiet', textContent: 'Cerrar' });
     close.onclick = () => { state.quiz = null; save(); render(); };
     actions.append(more, close);
-    res.append(msg, f, actions);
+    const row = document.createElement('div');
+    row.className = 'quiz-row';
+    const txt = document.createElement('div');
+    txt.append(msg, f);
+    row.append(tuxCat(q.picked === right), txt);
+    res.append(row, actions);
   }
 
   function applyTheme() {
@@ -472,6 +652,7 @@
     ['Pausa de 5 minutos.', 'Te la ganaste.'],
   ];
   const quotes = () => [
+    'Empecemos el día con la mejor actitud.',
     'Hoy no tiene que ser perfecto, solo tiene que avanzar.',
     'Empieza por lo más pequeño. El resto viene solo.',
     'Hecho es mejor que perfecto.',
@@ -481,6 +662,54 @@
     'Lo estás haciendo mejor de lo que crees.',
     'Alguien te quiere mucho y está muy orgullosa de ti. 🧡',
     'Te quiero mucho. Vamos con todo hoy. 🧡',
+    'Eres el mejor, que no se te olvide. 🧡',
+    'Cada tarea tachada cuenta.',
+    'Tu ritmo también es válido.',
+    'Hoy es un buen día para empezar algo.',
+    'Respira, organiza, avanza.',
+    'Los pasos pequeños también llevan lejos.',
+    'Eres más capaz de lo que piensas.',
+    'Lo difícil es empezar. Después fluye.',
+    'No tienes que hacerlo todo, solo lo de hoy.',
+    'Celebra cada avance, por pequeño que sea.',
+    'Un vaso de agua y a darle.',
+    'Hoy te vas a sorprender.',
+    'Tu esfuerzo se nota, aunque no lo veas.',
+    'Bonito día para tachar cosas.',
+    'Hoy toca ser amable contigo mismo.',
+    'Vas mejor de lo que crees. De verdad.',
+  ];
+  const facts = [
+    'Un día en Venus dura más que un año en Venus.',
+    'Las nutrias marinas se toman de las manos al dormir para no separarse.',
+    'Los flamencos son rosados por los pigmentos de lo que comen.',
+    'Los gatos no pueden sentir el sabor dulce.',
+    'La huella de la nariz de cada perro es única, como una huella digital.',
+    'El Everest crece unos milímetros cada año.',
+    'En los caballitos de mar, son los machos los que llevan a las crías.',
+    'Los koalas pueden dormir hasta unas 20 horas al día.',
+    'El sonido viaja unas cuatro veces más rápido en el agua que en el aire.',
+    'La Torre Eiffel puede crecer unos 15 cm en verano por el calor.',
+    'Los ojos de los gatos brillan en la oscuridad por una capa que refleja la luz.',
+    'Las mariposas sienten el sabor con las patas.',
+    'El río Amazonas no tiene ni un puente que lo cruce.',
+    'Las jirafas tienen la misma cantidad de vértebras en el cuello que nosotros: siete.',
+    'Un rayo puede ser unas cinco veces más caliente que la superficie del Sol.',
+    'Los gatos tienen 32 músculos en cada oreja.',
+    'Los pingüinos emperador pueden bucear a más de 500 metros de profundidad.',
+    'En Japón hay islas donde viven más gatos que personas, como Aoshima.',
+    'El cerebro usa cerca del 20 % de la energía de todo el cuerpo.',
+    'Los delfines duermen con la mitad del cerebro despierta.',
+    'Mayas y aztecas usaban los granos de cacao como moneda.',
+    'En Perú hay más de 3 000 variedades de papa.',
+    'Los gatos pasan cerca de dos tercios de su vida durmiendo.',
+    'Las abejas pueden aprender a reconocer rostros humanos.',
+    'Los pulpos tienen tres corazones y sangre azul.',
+    'La miel bien guardada prácticamente no se echa a perder.',
+    'Las vacas pueden reconocer a sus compañeras y se estresan si las separan.',
+    'Los gatos no solo ronronean cuando están felices: también lo hacen para calmarse.',
+    'Un año en Neptuno dura unos 165 años terrestres.',
+    'Los colibríes son las únicas aves que pueden volar hacia atrás.',
   ];
 
   let today = dayKey(new Date());
@@ -494,7 +723,9 @@
   });
   const nextTask = () => sorted(tasks()).find(t => !t.done);
 
-  const quoteOfDay = () => { const q = quotes(); const n = Number(today.replaceAll('-', '')); return q.at(n % q.length); };
+  const dayNum = () => Math.floor(Date.parse(today + 'T12:00:00') / 864e5);
+  const quoteOfDay = () => { const q = quotes(); return q.at(dayNum() % q.length); };
+  const factOfDay = () => facts.at((dayNum() * 7) % facts.length);
 
   const checkSvg = '<svg viewBox="0 0 14 14"><path d="M2.5 7.5l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -505,11 +736,31 @@
     const ds = d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
     $('date').textContent = ds.charAt(0).toUpperCase() + ds.slice(1);
     $('quote').textContent = quoteOfDay();
+    $('factDay').textContent = '💡 Dato curioso: ' + factOfDay();
+    const av = $('avatar');
+    if (av) av.src = state.settings.photo || 'gata.jpg';
 
     const list = tasks();
     const done = list.filter(t => t.done).length;
     $('countText').textContent = list.length ? `${done} de ${list.length} hechas` : 'Lista de hoy';
     $('bar').style.width = list.length ? `${(done / list.length) * 100}%` : '0';
+
+    // plan del día: cuántas cosas va a hacer hoy
+    const goal = state.goals[today];
+    $('planCard').hidden = !(state.settings.plan && goal === undefined);
+    if (!$('planCard').hidden && !$('planBtns').childElementCount) {
+      for (let n = 1; n <= 8; n++) {
+        const b = Object.assign(document.createElement('button'), { textContent: n });
+        b.onclick = () => { state.goals[today] = n; save(); render(); toast(`Perfecto: ${n} ${n === 1 ? 'cosa' : 'cosas'} hoy.`, 'Ahora anótalas abajo. 📝'); $('newText').focus(); };
+        $('planBtns').append(b);
+      }
+      const skip = Object.assign(document.createElement('button'), { textContent: 'Hoy no', className: 'quiet' });
+      skip.onclick = () => { state.goals[today] = 0; save(); render(); };
+      $('planBtns').append(skip);
+    }
+    const missing = goal ? goal - list.length : 0;
+    $('goalLine').textContent = !state.settings.plan || !goal ? '' :
+      missing > 0 ? `Meta de hoy: ${goal}. Te falta${missing > 1 ? 'n' : ''} anotar ${missing}.` : `Meta de hoy: ${goal}. ¡Ya anotaste todo! ✍️`;
 
     const next = nextTask();
     const body = $('nowBody');
@@ -532,8 +783,8 @@
     } else if (list.length) {
       const wrap = document.createElement('div');
       wrap.className = 'alldone';
-      const img = document.createElement('img');
-      img.src = 'gata.jpg'; img.alt = ''; img.onerror = () => img.remove();
+      const img = threeBlackCats();
+      img.classList.add('cats');
       const h = document.createElement('div');
       h.className = 'task'; h.style.margin = '0 0 4px';
       h.textContent = 'Terminaste todo por hoy.';
@@ -545,7 +796,20 @@
     } else {
       const p = document.createElement('p');
       p.className = 'empty';
-      p.textContent = 'Empieza con una sola cosa. Solo una.';
+      const starts = [
+        'Empieza con una sola cosa. Solo una.',
+        'Bien, empecemos con las tareas. 💪',
+        '¡A darle con todo hoy!',
+        '¿Qué es lo primero que quieres sacar hoy?',
+        'Nuevo día, lista nueva. Anota lo primero. ✍️',
+        'Vamos con calma: una tarea y arrancamos.',
+        'Hoy va a ser un buen día. ¿Por dónde empezamos?',
+        `${cat()} está lista para acompañarte. 🐾`,
+        'Pon lo más fácil primero y agarra impulso.',
+        'Respira, anota y a darle.',
+        'Tú puedes con todo lo de hoy. 🧡',
+      ];
+      p.textContent = starts.at(dayNum() % starts.length);
       body.append(p);
     }
 
@@ -641,6 +905,30 @@
   const bindSelect = (id, key, stamp) => { $(id).value = String(state.settings[key]); $(id).onchange = e => { state.settings[key] = Number(e.target.value); state[stamp] = Date.now(); save(); }; };
   bindSelect('nudge', 'nudge', 'lastNudge');
   bindSelect('pause', 'pause', 'lastPause');
+  // foto personalizada: se recorta en cuadrado y se guarda chiquita
+  $('photoBtn').onclick = () => $('photoInput').click();
+  $('photoInput').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.width, img.height), size = 256;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      state.settings.photo = c.toDataURL('image/jpeg', 0.85);
+      URL.revokeObjectURL(img.src);
+      save(); render(); toast('¡Foto cambiada!', 'Te ves increíble. 🧡');
+    };
+    img.src = URL.createObjectURL(file);
+    e.target.value = '';
+  };
+  $('photoReset').onclick = () => { state.settings.photo = ''; save(); render(); };
+  $('petOn').checked = state.settings.pet;
+  $('petOn').onchange = e => { state.settings.pet = e.target.checked; save(); if (e.target.checked) walkCat(); };
+  $('planOn').checked = state.settings.plan;
+  $('planOn').onchange = e => { state.settings.plan = e.target.checked; save(); render(); };
+
   $('theme').value = state.settings.theme;
   $('theme').onchange = e => { state.settings.theme = e.target.value; applyTheme(); save(); };
   $('quizOn').checked = state.settings.quiz;
@@ -677,6 +965,7 @@
   let titleTimer;
   function notify(title, body) {
     chime();
+    walkCat();
     toast(title, body);
     if ('Notification' in window && Notification.permission === 'granted') {
       try { const n = new Notification(title, { body }); n.onclick = () => { window.focus(); n.close(); }; } catch (e) {}
@@ -687,7 +976,26 @@
       titleTimer = setInterval(() => { document.title = (on = !on) ? '🐾 ' + title : 'Mi día'; }, 1200);
     }
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { clearInterval(titleTimer); document.title = 'Mi día'; } });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      clearInterval(titleTimer); document.title = 'Mi día';
+      if (walkQueued) { walkQueued = false; setTimeout(walkCat, 400); }
+    } else {
+      goalNag(10);
+    }
+  });
+
+  // si dijo que haría N cosas y anotó menos, se lo recuerda al salir y cada media hora
+  function goalNag(minGapMin) {
+    const goal = state.goals[today];
+    if (!state.settings.plan || !goal) return false;
+    const n = tasks().length, h = new Date().getHours();
+    if (n >= goal || h < 8 || h >= 22 || Date.now() - state.lastGoalNag < minGapMin * 60000) return false;
+    state.lastGoalNag = Date.now(); save();
+    const miss = goal - n;
+    notify('Oye 📝', miss === 1 ? `No te olvides de anotar tu ${ordinal(n + 1)} tarea.` : `Te faltan anotar ${miss} tareas de las ${goal} que pensabas hacer hoy.`);
+    return true;
+  }
 
   function tick() {
     const d = new Date();
@@ -728,6 +1036,7 @@
       state.lastPause = Date.now(); changed = true;
     }
 
+    goalNag(30);
     if (changed) save();
   }
 
@@ -755,6 +1064,8 @@
       setTimeout(() => s.remove(), 900);
     }
   }
+
+  window.miDia = { walkCat, newQuiz: () => { newQuiz(); save(); render(); } }; // para probar desde la consola
 
   render();
   tick();
