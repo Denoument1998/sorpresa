@@ -334,6 +334,9 @@
       </div>      <div class="row">
         <label for="ignoreSilent">Sonar aunque el iPhone est&eacute; en silencio</label>
         <input id="ignoreSilent" type="checkbox">
+      </div>      <div class="row">
+        <label for="floatOn">Ventanita flotante al empezar el enfoque (Chrome o Edge en la compu)</label>
+        <input id="floatOn" type="checkbox">
       </div>
       <div class="row">
         <span id="notifStatus" style="color:var(--muted); font-size:15px"></span>
@@ -355,7 +358,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
 
   let state = {
-    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, sfx: true, petSound: true, ignoreSilent: false, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
+    days: {}, settings: { name: 'Augusto', catName: 'la Gordita', nudge: 60, pause: 90, sound: true, sfx: true, petSound: true, ignoreSilent: false, floatOn: true, theme: 'auto', quiz: true, photo: '', pet: true, plan: true },
     lastNudge: 0, lastPause: 0, dismissed: '', quiz: null, score: { ok: 0, total: 0 }, asked: [], goals: {}, lastGoalNag: 0
   };
   try {
@@ -1331,7 +1334,9 @@
   $('sfxOn').onchange = e => { state.settings.sfx = e.target.checked; save(); if (e.target.checked) sfx('sparkle'); };
   $('petSoundOn').checked = state.settings.petSound;
   $('petSoundOn').onchange = e => { state.settings.petSound = e.target.checked; save(); if (e.target.checked) petSound(); };
-  $('ignoreSilent').checked = state.settings.ignoreSilent;
+  $('floatOn').checked = state.settings.floatOn;
+  $('floatOn').onchange = e => { state.settings.floatOn = e.target.checked; save(); };
+  if (!('documentPictureInPicture' in window)) $('floatOn').closest('.row').hidden = true;  $('ignoreSilent').checked = state.settings.ignoreSilent;
   $('ignoreSilent').onchange = e => { state.settings.ignoreSilent = e.target.checked; save(); applyAudioSession(); sfx('sparkle'); };
   $('enableNotif').onclick = async () => {
     try { await Notification.requestPermission(); } catch (e) {}
@@ -1630,6 +1635,7 @@
     state.focusAsk = null;
     save(); render();
     toast('¡Vamos!', `${cat()} te acompaña ${mins} minutos. 🐾`);
+    if (state.settings.floatOn && canFloat()) openFloat();
   }
   function pauseFocus() {
     const f = state.focus;
