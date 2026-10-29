@@ -177,7 +177,11 @@
   .week-stats span { color: var(--muted); font-size: 13px; }
   .week-msg { margin: 12px 0 0; color: var(--muted); font-size: 15px; }  .drag { background: none; color: var(--muted); padding: 2px 2px; cursor: grab; touch-action: none; font-size: 17px; opacity: .55; line-height: 1; }
   .drag:active { cursor: grabbing; }
-  li.dragging { background: var(--card); box-shadow: 0 8px 24px rgba(0,0,0,.18); border-radius: 12px; position: relative; z-index: 2; padding-left: 6px; padding-right: 6px; }  .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  li.dragging { background: var(--card); box-shadow: 0 8px 24px rgba(0,0,0,.18); border-radius: 12px; position: relative; z-index: 2; padding-left: 6px; padding-right: 6px; }  .tprog { flex-basis: 100%; height: 4px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 2px; }
+  .tprog i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .5s; }
+  .tprog i.late { background: #ff9f0a; }
+  li.done .tprog i { background: var(--ok); }
+  .range-sep { align-self: center; color: var(--muted); font-size: 14px; }  .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
 
   .checkin-overlay {
     position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px;
@@ -254,7 +258,9 @@
   <div class="card">
     <form id="addForm" autocomplete="off">
       <input type="text" id="newText" placeholder="Agregar algo para hoy" required>
-      <input type="time" id="newTime" title="Hora (opcional)">
+      <input type="time" id="newTime" title="Desde (opcional)">
+      <span class="range-sep">a</span>
+      <input type="time" id="newEnd" title="Hasta (opcional)">
       <button type="submit">Agregar</button>
     </form>
     <label class="form-opt"><input type="checkbox" id="newComplex"> Esta tarea tiene varios pasos</label>
@@ -266,7 +272,7 @@
         <option value="weekly">Cada semana, este día</option>
       </select>
     </label>
-    <p class="hint">La hora es opcional. Si le pones una, te aviso 10 minutos antes y a la hora.</p>
+    <p class="hint">Las horas son opcionales. Pon desde qué hora y hasta qué hora: al terminar el tiempo, tu mascota te pregunta si terminaste.</p>
   </div>
 
   <div class="card">
@@ -913,10 +919,10 @@
     if (state.focus || state.focusAsk) {
       renderFocusBox(body);
     } else if (next) {
-      if (next.time) {
+      if (next.time || next.end) {
         const w = document.createElement('div');
         w.className = 'when';
-        w.textContent = next.time;
+        w.textContent = next.end ? (next.time || 'ahora') + ' – ' + next.end : next.time;
         body.append(w);
       }
       const step = currentStep(next);
@@ -925,6 +931,7 @@
         of.className = 'of';
         of.textContent = `${next.text} · paso ${next.steps.indexOf(step) + 1} de ${next.steps.length}`;
         body.append(of);
+        if (isChallenge(next) && !next.challengeResult) { const ch = document.createElement('div'); ch.className = 'of'; ch.style.color = 'var(--accent)'; ch.textContent = `🏁 Reto de ${catLower()}: termina todo antes de las ${next.end}`; body.append(ch); }
       }
       const t = document.createElement('div');
       t.className = 'task';
@@ -980,10 +987,12 @@
         const ti = Object.assign(document.createElement('input'), { type: 'text', value: t.text });
         const hi = Object.assign(document.createElement('input'), { type: 'time', value: t.time || '' });
         hi.style.flex = '0 0 110px';
+        const he = Object.assign(document.createElement('input'), { type: 'time', value: t.end || '', title: 'Hasta' });
+        he.style.flex = '0 0 110px';
         const ok = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Guardar' });
         const no = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Cancelar' });
         no.style.background = 'none'; no.style.color = 'var(--muted)';
-        f.append(ti, hi, ok, no);
+        f.append(ti, hi, he, ok, no);
         if (t.recurId) {
           const sr = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Dejar de repetir' });
           sr.style.background = 'none'; sr.style.color = 'var(--muted)';
@@ -995,6 +1004,9 @@
           const nt = ti.value.trim();
           if (!nt) return;
           const nh = hi.value || null;
+          const ne = he.value || null;
+          if (ne !== (t.end || null)) { t.checked = false; t.snoozeUntil = 0; }
+          t.end = ne;
           if (nh !== t.time) { t.pre = false; t.at = false; t.checked = false; t.snoozeUntil = 0; }
           t.text = nt; t.time = nh; editingId = null;
           const rt = (state.recurring || []).find(r => r.id === t.recurId);
@@ -1025,6 +1037,7 @@
       s.textContent = t.text;
       if (!t.done) { s.title = 'Toca para editar'; s.onclick = () => { editingId = t.id; render(); }; }
       if (t.recurId) s.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '🔁' }));
+      if (isChallenge(t)) s.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: t.challengeResult === 'win' ? '🏆' : t.challengeResult === 'lose' ? '😼' : '🏁' }));
       const steps = t.steps || [];
       if (steps.length) {
         const bd = document.createElement('span');
@@ -1033,10 +1046,10 @@
         s.append(bd);
       }
       li.append(c, s);
-      if (t.time) {
+      if (t.time || t.end) {
         const tm = document.createElement('span');
         tm.className = 'time';
-        tm.textContent = t.time;
+        tm.textContent = t.end ? (t.time || '…') + '–' + t.end : t.time;
         li.append(tm);
       }
       if (!t.done) {
@@ -1058,6 +1071,7 @@
       del.textContent = '✕';
       del.onclick = () => { state.days[today] = tasks().filter(x => x.id !== t.id); save(); render(); };
       li.append(del);
+      if (steps.length || t.end) li.append(progLine(t));
       if (steps.length || openSteps.has(t.id)) li.append(renderSteps(t));
       ul.append(li);
     }
@@ -1085,7 +1099,7 @@
     for (const r of state.recurring || []) {
       const ok = r.rule === 'daily' || (r.rule === 'weekdays' && dow >= 1 && dow <= 5) || (r.rule === 'weekly' && dow === r.dow);
       if (!ok || added.includes(r.id)) continue;
-      tasks().push({ id: Date.now() + Math.random(), text: r.text, time: r.time, done: false, created: Date.now(), pre: false, at: false, steps: [], recurId: r.id });
+      tasks().push({ id: Date.now() + Math.random(), text: r.text, time: r.time, end: r.end || null, done: false, created: Date.now(), pre: false, at: false, steps: [], recurId: r.id });
       added.push(r.id); changed = true;
     }
     if (changed) save();
@@ -1277,10 +1291,20 @@
       return w;
     };
     // paso 1: la pregunta
-    card.append(who(pick(checkinQuestions(t))));
+    const endQ = [
+      `¡Se acabó el tiempo de "${t.text}"! ${cat()} quiere saber: ¿ya terminaste?`,
+      `${cat()} vino a preguntarte: ¿ya terminaste "${t.text}"?`,
+      `Ya es la hora de fin de "${t.text}". ¿Cómo te fue?`,
+    ];
+    card.append(who(t.challengeResult === 'lose'
+      ? `¡${cat()} ganó el reto esta vez! 😼 ¿Cómo vas con "${t.text}"? La próxima le ganas.`
+      : t.end ? pick(endQ) : pick(checkinQuestions(t))));
     const opts = document.createElement('div');
     opts.className = 'opts';
-    for (const [label, replies, action] of reasons) {
+    const doneBtn = Object.assign(document.createElement('button'), { textContent: '¡Sí, ya terminé! ✅' });
+    doneBtn.style.fontWeight = '600';
+    doneBtn.onclick = e => { close(); complete(t.id, e); };
+    opts.append(doneBtn);    for (const [label, replies, action] of reasons) {
       const b = Object.assign(document.createElement('button'), { textContent: label });
       b.onclick = () => answer(replies, action);
       opts.append(b);
@@ -1333,11 +1357,12 @@
   function checkLate() {
     let changed = false;
     for (const t of tasks()) {
-      if (t.done || !t.time || t.checked) continue;
-      const due = Date.parse(`${today}T${t.time}:00`) + 20 * 60000;
+      if (t.done || !(t.time || t.end) || t.checked) continue;
+      const due = t.end ? Date.parse(`${today}T${t.end}:00`) : Date.parse(`${today}T${t.time}:00`) + 20 * 60000;
       if (t.created > due) continue; // se anotó cuando ya era tarde: no la regañamos
       if (Date.now() < due || (t.snoozeUntil && Date.now() < t.snoozeUntil)) continue;
       t.checked = true; changed = true;
+      if (isChallenge(t) && !t.challengeResult) t.challengeResult = 'lose';
       notify(`${cat()} quiere saber algo`, `¿Cómo vas con "${t.text}"?`);
       showCheckin(t);
     }
@@ -1386,6 +1411,7 @@
     msg.textContent = !totalDone ? 'Esta semana recién empieza. Una tarea y arrancamos. 🐾'
       : totalDone >= 20 ? `¡Semanón! Tu mejor día fue ${bestName}, con ${best.done} tareas. Lo estás haciendo increíble. ✨`
       : `Tu mejor día fue ${bestName}, con ${best.done} ${best.done === 1 ? 'tarea' : 'tareas'}. Cada paso cuenta. 💪`;
+    if (state.trophies) msg.textContent += ` 🏆 Retos ganados a ${catLower()}: ${state.trophies}.`;
     box.replaceChildren(bars, stats, msg);
   }
   // ---------- arrastrar para ordenar (mouse y dedo) ----------
@@ -1414,6 +1440,40 @@
     window.addEventListener('pointermove', move);
     ['pointerup', 'pointercancel', 'mouseup', 'touchend'].forEach(ev => window.addEventListener(ev, up));
   }
+  // ---------- progreso de cada tarea y reto de la mascota ----------
+  function isChallenge(t) { return (t.steps || []).length >= 2 && !!t.end; }
+  function taskPct(t) {
+    if (t.done) return { pct: 100, late: false };
+    const st = t.steps || [];
+    const endMs = t.end ? Date.parse(`${today}T${t.end}:00`) : 0;
+    const late = !!endMs && Date.now() > endMs;
+    if (st.length) return { pct: Math.round(st.filter(s => s.done).length / st.length * 100), late };
+    if (endMs) {
+      const a = t.time ? Date.parse(`${today}T${t.time}:00`) : t.created;
+      if (endMs > a) return { pct: Math.max(0, Math.min(100, Math.round((Date.now() - a) / (endMs - a) * 100))), late };
+    }
+    return { pct: 0, late };
+  }
+  function progLine(t) {
+    const d = document.createElement('div');
+    d.className = 'tprog';
+    const i = document.createElement('i');
+    const p = taskPct(t);
+    i.style.width = p.pct + '%';
+    if (p.late) i.className = 'late';
+    d.append(i);
+    return d;
+  }
+  function updateBars() {
+    document.querySelectorAll('#list li[data-id]').forEach(li => {
+      const t = tasks().find(x => String(x.id) === li.dataset.id);
+      const i = li.querySelector('.tprog > i');
+      if (!t || !i) return;
+      const p = taskPct(t);
+      i.style.width = p.pct + '%';
+      i.className = p.late ? 'late' : '';
+    });
+  }
   function renderLeftover() {
     const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
     const pending = prev ? state.days[prev].filter(t => !t.done) : [];
@@ -1435,6 +1495,8 @@
     const t = tasks().find(x => x.id === id);
     if (!t) return;
     t.done = true;
+    let wonChallenge = false;
+    if (isChallenge(t) && !t.challengeResult && Date.now() <= Date.parse(`${today}T${t.end}:00`)) { t.challengeResult = 'win'; state.trophies = (state.trophies || 0) + 1; wonChallenge = true; }
     (t.steps || []).forEach(s => { s.done = true; });
     openSteps.delete(id);
     save();
@@ -1443,6 +1505,7 @@
     sfx(allDone ? 'fanfare' : 'sparkle');
     if (allDone) toast('Terminaste todo por hoy.', allDoneMsgs().at(dayNum() % allDoneMsgs().length));
     else toast(...sometimesLove(cheers(), 0.25));
+    if (wonChallenge) toast(`🏆 ¡Le ganaste a ${catLower()}!`, 'Terminaste el reto a tiempo. ¡Eres imparable!');
     render();
   }
   function undo(id) {
@@ -1455,21 +1518,23 @@
     const text = $('newText').value.trim();
     if (!text) return;
     const id = Date.now() + Math.random();
-    tasks().push({ id, text, time: $('newTime').value || null, done: false, created: Date.now(), pre: false, at: false, steps: [] });
+    tasks().push({ id, text, time: $('newTime').value || null, end: $('newEnd').value || null, done: false, created: Date.now(), pre: false, at: false, steps: [] });
     const rep = $('newRepeat').value;
     if (rep) {
       const rid = 'r' + Date.now();
-      (state.recurring ||= []).push({ id: rid, text, time: tasks().at(-1).time, rule: rep, dow: new Date().getDay() });
+      (state.recurring ||= []).push({ id: rid, text, time: tasks().at(-1).time, end: tasks().at(-1).end, rule: rep, dow: new Date().getDay() });
       tasks().at(-1).recurId = rid;
       ((state.recurAdded ||= {})[today] ||= []).push(rid);
       $('newRepeat').value = '';
     }
-    $('newText').value = ''; $('newTime').value = '';
+    $('newText').value = ''; $('newTime').value = ''; $('newEnd').value = '';
     if ($('newComplex').checked) {
       $('newComplex').checked = false;
       openSteps.add(id);
       save(); render(); focusStepInput(id);
-      toast('Tarea con pasos.', 'Anota los pasos en orden; se irán desbloqueando uno por uno.');
+      const nt = tasks().at(-1);
+      if (nt.end) toast('🏁 ¡Reto aceptado!', `Anota los pasos. ${cat()} te reta a terminarlos antes de las ${nt.end}.`);
+      else toast('Tarea con pasos.', 'Anota los pasos en orden; se irán desbloqueando uno por uno.');
     } else {
       save(); render(); $('newText').focus();
     }
@@ -1715,6 +1780,7 @@
 
     for (const x of tasks()) if (x.remindAt && !x.done && Date.now() >= x.remindAt) { delete x.remindAt; changed = true; notify('⏰ Recordatorio', x.text); }
     if (!focusing()) { goalNag(30); checkLate(); }
+    updateBars();
     if (changed) save();
   }
 
