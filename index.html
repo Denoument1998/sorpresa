@@ -1474,6 +1474,41 @@
       i.className = p.late ? 'late' : '';
     });
   }
+  // ---------- ventana de celebracion: le ganaste el reto a tu mascota ----------
+  function showVictory(t) {
+    const ov = document.createElement('div');
+    ov.className = 'checkin-overlay';
+    const card = document.createElement('div');
+    card.className = 'checkin';
+    card.style.textAlign = 'center';
+    const trophy = document.createElement('div');
+    trophy.style.fontSize = '56px'; trophy.style.lineHeight = '1.1';
+    trophy.textContent = '🏆';
+    const pet = document.createElement('div');
+    pet.style.display = 'flex'; pet.style.justifyContent = 'center'; pet.style.margin = '6px 0 12px';
+    pet.append(calmPet(6));
+    const h = document.createElement('div');
+    h.className = 'task'; h.style.margin = '0 0 6px'; h.style.fontSize = '24px'; h.style.fontWeight = '700';
+    h.textContent = `¡Le ganaste a ${catLower()}!`;
+    const p = document.createElement('p');
+    p.className = 'tip';
+    p.textContent = pick([
+      `Terminaste "${t.text}" antes de las ${t.end}. ¡Eres imparable!`,
+      `${cat()} no lo puede creer. 😹 ¡Qué crack!`,
+      `Reto cumplido a tiempo. ${cat()} ya quiere la revancha. 🐾`,
+      `¡Victoria! Lo hiciste súper. Ahora sigue con lo siguiente. ✨`,
+    ]);
+    const ok = Object.assign(document.createElement('button'), { className: 'primary', textContent: '¡Siii! 🎉' });
+    ok.onclick = () => ov.remove();
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    card.append(trophy, pet, h, p, ok);
+    ov.append(card);
+    document.body.append(ov);
+    sfx('fanfare');
+    setTimeout(petSound, 700);
+    celebrate();
+    setTimeout(celebrate, 350);
+  }
   function renderLeftover() {
     const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
     const pending = prev ? state.days[prev].filter(t => !t.done) : [];
@@ -1505,7 +1540,7 @@
     sfx(allDone ? 'fanfare' : 'sparkle');
     if (allDone) toast('Terminaste todo por hoy.', allDoneMsgs().at(dayNum() % allDoneMsgs().length));
     else toast(...sometimesLove(cheers(), 0.25));
-    if (wonChallenge) toast(`🏆 ¡Le ganaste a ${catLower()}!`, 'Terminaste el reto a tiempo. ¡Eres imparable!');
+    if (wonChallenge) setTimeout(() => showVictory(t), 400);
     render();
   }
   function undo(id) {
