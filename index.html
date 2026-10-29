@@ -144,6 +144,24 @@
   .plan-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .plan-btns button { background: var(--bg); color: var(--ink); min-width: 46px; font-weight: 600; }
   .goal-line { color: var(--muted); font-size: 14px; margin-top: 6px; }
+
+  .checkin-overlay {
+    position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px;
+    background: rgba(0,0,0,.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    animation: fadein .25s ease-out;
+  }
+  @keyframes fadein { from { opacity: 0; } }
+  .checkin { background: var(--card); color: var(--ink); border-radius: 22px; padding: 22px; width: 100%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,.25); animation: pop .35s cubic-bezier(.2,.9,.3,1.3); }
+  @keyframes pop { from { transform: scale(.9) translateY(10px); opacity: 0; } }
+  .checkin .who { display: flex; gap: 14px; align-items: flex-end; margin-bottom: 16px; }
+  .checkin .bubble { background: var(--bg); border-radius: 16px 16px 16px 4px; padding: 12px 14px; font-weight: 500; flex: 1; }
+  .checkin .sign { display: block; color: var(--muted); font-size: 13px; font-weight: 400; margin-top: 4px; }
+  .checkin .opts { display: grid; gap: 8px; }
+  .checkin .opts button { background: var(--bg); color: var(--ink); text-align: left; padding: 11px 14px; }
+  .checkin .tip { color: var(--muted); font-size: 15px; margin: 0 0 14px; }
+  .checkin .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .checkin .acts button { flex: 1 1 140px; }
+  .checkin .acts .soft { background: var(--bg); color: var(--ink); }
   @keyframes fly { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } }
 </style>
 </head>
@@ -330,6 +348,24 @@
     ['¡Qué chévere!', 'Sigue así, lo estás haciendo increíble. 🧡'],
     ['Eres increíble, ¿sabías?', 'Te quiero muchísimo. 🧡'],
     ['Un abrazo grande por esto.', 'Estoy muy orgullosa de ti. 🧡'],
+    ['Pensé en ti.', 'Y en lo bien que lo estás haciendo. 🧡'],
+    ['Eres mi persona favorita.', 'No lo olvides nunca. 🧡'],
+    ['Admiro lo mucho que te esfuerzas.', 'Te quiero. 🧡'],
+    ['Me haces muy feliz.', 'Y hoy lo estás haciendo genial. 🧡'],
+    ['Tú puedes con esto y con más.', 'Yo creo en ti. 🧡'],
+    ['Recuerda tomar agua.', 'Y que te quiero mucho. 🧡'],
+    ['Qué orgullo verte avanzar.', 'Te mando un abrazo enorme. 🧡'],
+    ['Eres más fuerte de lo que crees.', 'Te quiero muchísimo. 🧡'],
+    ['Estoy de tu lado, siempre.', 'Sigue así. 🧡'],
+    ['Un besito por esta tarea.', 'Te lo ganaste. 😘'],
+  ];
+  const allDoneMsgs = () => [
+    `Estoy muy orgullosa de ti. Te quiero mucho. 🧡 Ahora descansa, ${catLower()} te espera. 🐾`,
+    'Lo hiciste increíble hoy. Te mereces un descanso enorme. 🧡',
+    'Eres el mejor, que no se te olvide. Hoy lo demostraste. 🧡🐾',
+    'Qué orgullo, de verdad. Ahora relájate, que te lo ganaste. 🧡',
+    'Misión cumplida. Te quiero muchísimo. 🐾🧡',
+    `Día completado. ${cat()} y yo estamos muy orgullosas de ti. 🧡`,
   ];
   const sometimesLove = (list, chance) => Math.random() < chance ? pick(love) : pick(list);
 
@@ -414,6 +450,21 @@
     '.ooo...ooo.',
   ];
   const QMARK = ['.qqq.', 'q...q', '....q', '...q.', '..q..', '.....', '..q..'];
+  // la Gordita sentada, de frente
+  const GORDITA_SIT = [
+    'k.........k',
+    'kk.......kk',
+    'kgkkkkkkkgk',
+    'kgdgdgdgdgk',
+    'kggegggeggk',
+    'kgwwwpwwwgk',
+    '.kgwwwwwgk.',
+    '.kgwwwwwgk.',
+    'kggwwwwwggk',
+    'kgdgwwwgdgk',
+    'kgwkgggkwgk',
+    '.kkk...kkk.',
+  ];
 
   const threeBlackCats = () => sprite([
     [BLACK_CAT, 0, 7], [BLACK_CAT, 14, 7], [BLACK_CAT, 28, 7],
@@ -814,7 +865,7 @@
       h.textContent = 'Terminaste todo por hoy.';
       const p = document.createElement('div');
       p.style.color = 'var(--muted)';
-      p.textContent = `Estoy muy orgullosa de ti. Te quiero mucho. 🧡 Ahora descansa, ${catLower()} te espera. 🐾`;
+      p.textContent = allDoneMsgs().at(dayNum() % allDoneMsgs().length);
       wrap.append(img, h, p);
       body.append(wrap);
     } else {
@@ -974,6 +1025,130 @@
     render();
   }
 
+  // ---------- la Gordita pregunta si una tarea se atrasó 20 minutos ----------
+  const checkinQuestions = t => [
+    `${cat()} se dio cuenta de que "${t.text}" sigue pendiente. ¿Qué pasa? ¿Algo no te deja avanzar?`,
+    `${cat()} vino a ver cómo vas con "${t.text}". ¿Todo bien?`,
+    `${cat()} quiere saber qué te está costando con "${t.text}".`,
+    `Ya pasaron 20 minutos de "${t.text}" y ${catLower()} está un poquito preocupada. ¿Qué pasa?`,
+    `${cat()} se acercó a preguntarte: ¿qué te frena con "${t.text}"?`,
+  ];
+  // [motivo, respuestas, acción]
+  const reasons = [
+    ['No sé por dónde empezar', [
+      'Empieza por lo más chiquito que se te ocurra. Solo eso. Tú puedes. 🐾',
+      'No tienes que verlo todo claro. Da el primer pasito y el resto se va acomodando.',
+      `Elige la parte más fácil y arranca por ahí. ${cat()} te acompaña. 🐾`,
+      'Empezar es lo más difícil, y tú eres capaz de hacerlo. Un paso y listo.',
+    ], 'split'],
+    ['Es muy grande, me abruma', [
+      'Las cosas grandes se hacen en pedacitos. Vamos a partirla en pasos.',
+      'No tienes que hacerla toda ahora. Un pedazo ya es avance.',
+      'Respira. Es grande, pero tú eres más grande. 💪',
+      'Paso a paso se llega lejos. Y tú ya llegaste lejos antes.',
+    ], 'split'],
+    ['No tengo energía', [
+      'Está bien estar cansado. Haz solo 5 minutos y, si no fluye, descansas.',
+      'Toma un vaso de agua, estírate un poco y lo intentamos otra vez. Tú puedes.',
+      'Hoy puedes ir lento y aun así avanzar. Lo estás haciendo bien. 🧡',
+      'Descansa un ratito sin culpa. Después lo retomas con todo.',
+    ], 'snooze'],
+    ['Me distraje', [
+      '¡Pasa! Lo importante es que volviste. Vamos de nuevo.',
+      'Deja el celular un ratito y dale 10 minutos. Tú puedes.',
+      'Distraerse es humano. Volver es de campeones. 🐾',
+      'Cero culpa. Pon un temporizador de 10 minutos y arranca.',
+      `${cat()} también se distrae con cualquier cosa. Lo importante es volver. 🐾`,
+    ], 'go'],
+    ['Algo se complicó', [
+      'No todo sale como uno planea, y está bien. Ajustamos y seguimos.',
+      'No es tu culpa. Muévela para un poquito más tarde y sigue con lo demás.',
+      `A veces el día cambia de planes. Lo importante es no rendirse. ${cat()} cree en ti. 🧡`,
+      'Tú siempre encuentras la forma. Esta vez también.',
+    ], 'snooze'],
+    ['Ya casi, dame un ratito', [
+      `¡Eso! ${cat()} sabía que ibas avanzando. 🐾`,
+      'Qué bien, sigue así. Ya casi lo tienes.',
+      '¡Vas súper! Termínala con calma.',
+      `¡Qué bien! ${cat()} está orgullosa de ti. 🧡`,
+    ], 'snooze'],
+  ];
+
+  let checkinOpen = false;
+  const checkinQueue = [];
+  function showCheckin(t) {
+    if (checkinOpen) { checkinQueue.push(t); return; }
+    checkinOpen = true;
+    const ov = document.createElement('div');
+    ov.className = 'checkin-overlay';
+    const card = document.createElement('div');
+    card.className = 'checkin';
+    ov.append(card);
+    const close = () => {
+      ov.remove(); checkinOpen = false;
+      const n = checkinQueue.shift();
+      if (n && !n.done) setTimeout(() => showCheckin(n), 600);
+    };
+    const who = (text) => {
+      const w = document.createElement('div');
+      w.className = 'who';
+      const b = document.createElement('div');
+      b.className = 'bubble';
+      b.textContent = text;
+      w.append(sprite([[GORDITA_SIT, 0, 0]], 11, 12, 5), b);
+      return w;
+    };
+    // paso 1: la pregunta
+    card.append(who(pick(checkinQuestions(t))));
+    const opts = document.createElement('div');
+    opts.className = 'opts';
+    for (const [label, replies, action] of reasons) {
+      const b = Object.assign(document.createElement('button'), { textContent: label });
+      b.onclick = () => answer(replies, action);
+      opts.append(b);
+    }
+    card.append(opts);
+    document.body.append(ov);
+
+    // paso 2: el mensaje alentador
+    function answer(replies, action) {
+      card.replaceChildren(who(pick(replies)));
+      const tip = document.createElement('p');
+      tip.className = 'tip';
+      tip.textContent = pick(love).join(' ');
+      const acts = document.createElement('div');
+      acts.className = 'acts';
+      const ok = Object.assign(document.createElement('button'), { className: 'primary', textContent: action === 'go' ? '¡Vamos!' : '¡Gracias! 🐾' });
+      ok.onclick = close;
+      if (action === 'split' && !(t.steps || []).length) {
+        const sp = Object.assign(document.createElement('button'), { className: 'soft', textContent: 'Partirla en pasos' });
+        sp.onclick = () => { close(); openSteps.add(t.id); render(); focusStepInput(t.id); document.querySelector(`[data-step-input="${t.id}"]`)?.scrollIntoView({ block: 'center' }); };
+        acts.append(sp);
+      }
+      if (action === 'snooze' || action === 'split') {
+        const sn = Object.assign(document.createElement('button'), { className: 'soft', textContent: 'Pregúntame en 20 min' });
+        sn.onclick = () => { t.checked = false; t.snoozeUntil = Date.now() + 20 * 60000; save(); close(); toast('Listo.', `Te pregunto de nuevo en 20 minutos. 🐾`); };
+        acts.append(sn);
+      }
+      acts.append(ok);
+      card.append(tip, acts);
+    }
+  }
+
+  function checkLate() {
+    let changed = false;
+    for (const t of tasks()) {
+      if (t.done || !t.time || t.checked) continue;
+      const due = Date.parse(`${today}T${t.time}:00`) + 20 * 60000;
+      if (t.created > due) continue; // se anotó cuando ya era tarde: no la regañamos
+      if (Date.now() < due || (t.snoozeUntil && Date.now() < t.snoozeUntil)) continue;
+      t.checked = true; changed = true;
+      notify(`${cat()} quiere saber algo`, `¿Cómo vas con "${t.text}"?`);
+      showCheckin(t);
+    }
+    if (changed) save();
+  }
+
   function renderLeftover() {
     const prev = Object.keys(state.days).filter(k => k < today).sort().at(-1);
     const pending = prev ? state.days[prev].filter(t => !t.done) : [];
@@ -1000,7 +1175,7 @@
     save();
     celebrate(ev);
     const allDone = tasks().every(x => x.done);
-    if (allDone) toast('Terminaste todo por hoy.', 'Estoy muy orgullosa de ti. Te quiero mucho. 🧡');
+    if (allDone) toast('Terminaste todo por hoy.', allDoneMsgs().at(dayNum() % allDoneMsgs().length));
     else toast(...sometimesLove(cheers(), 0.25));
     render();
   }
@@ -1174,6 +1349,7 @@
     }
 
     goalNag(30);
+    checkLate();
     if (changed) save();
   }
 
@@ -1202,7 +1378,7 @@
     }
   }
 
-  window.miDia = { walkCat, newQuiz: () => { newQuiz(); save(); render(); } }; // para probar desde la consola
+  window.miDia = { walkCat, newQuiz: () => { newQuiz(); save(); render(); }, checkin: () => { const t = tasks().find(x => !x.done); if (t) showCheckin(t); } }; // para probar desde la consola
 
   render();
   tick();
