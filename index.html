@@ -1358,7 +1358,19 @@
     } catch (e) {}
   }
   ['pointerdown', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); });
+  // en iPhone/iPad el audio queda "muerto" al volver de segundo plano: se descarta y se crea uno nuevo en el siguiente toque
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  function reviveAudio() {
+    if (document.hidden) return;
+    if (isIOS) {
+      if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
+      unlockAudio.done = false;
+    } else if (audioCtx && audioCtx.state !== 'running') {
+      audioCtx.resume().catch(() => {});
+    }
+  }
+  document.addEventListener('visibilitychange', reviveAudio);
+  window.addEventListener('pageshow', reviveAudio);
 
 
   let titleTimer;
